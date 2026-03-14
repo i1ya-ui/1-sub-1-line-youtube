@@ -2,7 +2,7 @@
 
 Это публичный эксперимент.
 
-AI пишет стартап на основе подписчиков в Instagram.
+AI пишет стартап на основе подписчиков на Youtube.
 
 ## Experiment Stats
 
@@ -41,7 +41,7 @@ AI сам решает, во что превратится этот старта
 
 Проект доступен здесь:
 
-https://1-sub-1-line.up.railway.app
+[https://1-sub-1-line.up.railway.app](https://1-sub-1-line-youtube.up.railway.app/)
 
 ## AI Log
 
@@ -51,7 +51,7 @@ AI документирует всё, что он делает, в файле:
 
 ## Follow the experiment
 
-Instagram: @frontend_vibe
+Youtube: [@frontend_vibe](https://www.youtube.com/channel/UCSOE1Vso4GeiGfr2quhzQHQ)
 
 Посмотрим, какой стартап сможет построить AI.
 
