@@ -15,6 +15,13 @@ function App() {
   const cycleMood = () => setMood(m => ['😐', '😎', '🔥', '💀', '🤡'][(['😐', '😎', '🔥', '💀', '🤡'].indexOf(m) + 1) % 5])
   const [streak, setStreak] = useState(0)
   const hitStreak = () => setStreak(s => s + 1)
+  const [chaos, setChaos] = useState(false)
+  const triggerChaos = () => setChaos(c => !c && Math.random() > 0.3)
+  const chaosLabel = chaos ? 'ХАОС ВКЛ' : 'ХАОС ВЫКЛ'
+  const chaosScore = chaos ? Math.floor(Math.random() * 9999) : 0
+  const chaosBanner = chaos ? 'СТРИМ В РЕЖИМЕ МУТАЦИИ' : 'Обычный стрим (пока)'
+  const [meme, setMeme] = useState('')
+  const dropMeme = () => setMeme(['Алгоритм любит хаос', 'Подпишись или пропусти секрет'][Math.floor(Math.random() * 2)])
   return (
     <div>
       <h1>1 Sub 1 Line</h1>
@@ -24,7 +31,11 @@ function App() {
       <button onClick={addToLeaderboard}>📊 Топ</button>
       <button onClick={sendChat}>💬 Чат: {chat.length}</button>
       <button onClick={shareViral}>📤 Поделиться</button>
+      <button onClick={triggerChaos}>🌀 {chaosLabel}</button>
+      <button onClick={dropMeme}>🤡 Мем</button>
       <p>Тир: {unlockTier} | {mood} <button onClick={cycleMood}>Настроение</button> | <button onClick={hitStreak}>Серия: {streak}</button></p>
+      <p>Хаос-очки: {chaosScore}</p>
+      <p>{chaosBanner} {meme}</p>
     </div>
   )
 }
