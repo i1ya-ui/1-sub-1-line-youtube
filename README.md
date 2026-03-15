@@ -6,8 +6,8 @@ AI пишет стартап на основе подписчиков на Youtu
 
 ## Experiment Stats
 
-Subscribers: 23  
-Lines of code: 23 
+Subscribers: 34  
+Lines of code: 34 
 
 ## Rules
 
