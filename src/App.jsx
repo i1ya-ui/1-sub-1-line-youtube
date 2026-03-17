@@ -26,7 +26,7 @@ function App() {
   const boostHype = () => setHype(h => h + 1)
   const hypeLabel = `Хайп x${hype + 1}`
   return (
-    <div>
+    <div style={{ background: chaos ? '#ff00ff' : hype % 2 ? '#000000' : '#050018', color: '#00f6ff', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.25s ease', transform: chaos ? `rotate(${(spin || hype) * 7}deg) scale(${1 + hype * 0.05})` : 'none' }}>
       <h1>1 Sub 1 Line</h1>
       <p>1 подписчик = 1 строка кода</p>
       <button onClick={addReaction}>🔥 Реакция ({reactions.length})</button>
