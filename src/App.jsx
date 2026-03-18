@@ -25,6 +25,10 @@ function App() {
   const [hype, setHype] = useState(0)
   const boostHype = () => setHype(h => h + 1)
   const hypeLabel = `Хайп x${hype + 1}`
+  const [panic, setPanic] = useState(false)
+  const panicText = panic ? 'НЕ ЖМИ БОЛЬШЕ' : 'ПАНИК-КНОПКА'
+  const [panicCount, setPanicCount] = useState(0)
+  const hitPanic = () => { setPanic(p => !p); setChaos(true); setHype(h => h + 3); setPanicCount(c => c + 1) }
   return (
     <div style={{ background: chaos ? '#ff00ff' : hype % 2 ? '#000000' : '#050018', color: '#00f6ff', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.25s ease', transform: chaos ? `rotate(${(spin || hype) * 7}deg) scale(${1 + hype * 0.05})` : 'none' }}>
       <h1>1 Sub 1 Line</h1>
@@ -37,7 +41,9 @@ function App() {
       <button onClick={triggerChaos}>🌀 {chaosLabel}</button>
       <button onClick={dropMeme}>🤡 Мем</button>
       <button onClick={boostHype}>🚀 {hypeLabel}</button>
+      <button onClick={hitPanic}>🚨 {panicText}</button>
       <p>Тир: {unlockTier} | {mood} <button onClick={cycleMood}>Настроение</button> | <button onClick={hitStreak}>Серия: {streak}</button></p>
+      <p>Паник-жмыков: {panicCount}</p>
       <p>Хайп-трекер для чата</p>
       <p>Хаос-очки: {chaosScore}</p>
       <p>{chaosBanner} {meme}</p>
