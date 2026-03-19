@@ -46,6 +46,7 @@ function App() {
       <p>Паник-жмыков: {panicCount}</p>
       <p>Хайп-трекер для чата</p>
       <p>Хаос-очки: {chaosScore}</p>
+      {panicCount >= 1 && <p style={{ fontSize: '1.2em', color: '#ff0' }}>🔓 Секрет: ты жманул паник</p>}
       <p>{chaosBanner} {meme}</p>
     </div>
   )
