@@ -2,11 +2,17 @@ import { useState, useEffect } from 'react'
 const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a']
 function App() {
   const [subs, setSubs] = useState(23)
+  const [user, setUser] = useState(null)
+  const login = (name = `user_${subs}`) => setUser({ id: Date.now(), name })
+  const logout = () => setUser(null)
+  const isAuth = Boolean(user)
+  const [status, setStatus] = useState('guest')
+  useEffect(() => setStatus(isAuth ? 'member' : 'guest'), [isAuth])
   const [reactions, setReactions] = useState([])
   const addReaction = () => setReactions(prev => [...prev, '🔥'].slice(-99))
   const [chat, setChat] = useState(['Привет, стрим!'])
   const [unlockTier, setUnlockTier] = useState(subs >= 20 ? 2 : subs >= 10 ? 1 : 0)
-  const sendChat = () => setChat(c => [...c, `Сообщение #${c.length + 1}`].slice(-10))
+  const sendChat = () => isAuth && setChat(c => [...c, `Сообщение #${c.length + 1}`].slice(-10))
   const shareViral = () => navigator.share?.({ title: '1 Sub 1 Line', url: window.location.href })
   const [mood, setMood] = useState('😐')
   const cycleMood = () => setMood(m => ['😐', '😎', '🔥', '💀', '🤡'][(['😐', '😎', '🔥', '💀', '🤡'].indexOf(m) + 1) % 5])
@@ -36,7 +42,7 @@ function App() {
   const dropSticker = () => setStickers(s => [...s, { id: Date.now(), emoji: ['🌟','💫','✨','⭐'][Math.floor(Math.random()*4)], x: Math.random()*80, y: Math.random()*50 }].slice(-12))
   const [stories] = useState([{ id: 1, user: 'user_1' }, { id: 2, user: 'random_dev' }, { id: 3, user: 'viewer_99' }])
   const [dms, setDms] = useState([])
-  const addDM = () => setDms(d => [...d, `Новое сообщение #${d.length+1}`].slice(-5))
+  const addDM = () => isAuth && setDms(d => [...d, `Новое сообщение #${d.length+1}`].slice(-5))
   const [live, setLive] = useState(true)
   const [poll, setPoll] = useState({ a: 0, b: 0 })
   const votePoll = (v) => setPoll(p => ({ ...p, [v]: p[v] + 1 }))
@@ -68,9 +74,15 @@ function App() {
         <div style={{ width: 48, height: 48, borderRadius: '50%', background: `${colorStyle}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>👤</div>
         <h1 style={{ fontSize: '2.2em', textShadow: hype > 2 ? `0 0 20px ${colorStyle}` : 'none' }}>1 Sub 1 Line — Соцсеть</h1>
         {live && <span style={{ background: 'red', color: 'white', padding: '2px 6px', borderRadius: 4, fontSize: '0.7em' }}>LIVE</span>}
+        {isAuth && <span style={{ background: '#22c55e', color: '#001b00', padding: '2px 6px', borderRadius: 4, fontSize: '0.7em' }}>@{user.name}</span>}
         <button onClick={() => setNotifications(n => n + 1)} style={{ fontSize: '1.5em' }}>🔔 {notifications}</button>
+        {!isAuth ? <button onClick={() => login()}>Войти</button> : <button onClick={logout}>Выйти</button>}
+        {!isAuth && <button onClick={() => login(`demo_${Math.floor(Math.random()*999)}`)}>Demo вход</button>}
+        {!isAuth && <button onClick={() => login(`new_${Date.now().toString().slice(-4)}`)}>Signup</button>}
+        {isAuth && <button onClick={() => setChat(c => [...c, `@${user.name} online`].slice(-10))}>Статус</button>}
         <button onClick={cycleTheme}>{themeName}</button>
       </div>
+      <p style={{ margin: 0, opacity: 0.8 }}>Auth: {status}</p>
       <p>1 подписчик = 1 строка кода <span style={{ color: theme === 2 ? '#0f0' : '#ff0' }}>✓</span></p>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', maxWidth: 320 }}>{trending.map((t,i) => <span key={i} style={{ background: '#ff0333', color: '#fff', padding: '2px 6px', borderRadius: 4, fontSize: '0.85em' }}>{t}</span>)}</div>
       <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 0', width: '100%', maxWidth: 320 }}>
@@ -86,7 +98,9 @@ function App() {
         {chat.map((c,i) => <div key={i} style={{ background: 'rgba(0,255,0,0.1)', padding: '4px 10px', borderRadius: 12, marginBottom: 4, marginLeft: i % 2 ? 20 : 0 }}>{new Date().toLocaleTimeString().slice(0,5)} — {c}</div>)}
       </div>
       <button onClick={sendChat}>💬 Чат</button>
-      <input placeholder="Написать комментарий..." style={{ padding: 6, width: 200 }} />
+      {!isAuth && <p style={{ opacity: 0.8, margin: 0 }}>Войдите, чтобы писать в чат и ЛС</p>}
+      {isAuth && <p style={{ opacity: 0.8, margin: 0 }}>Вы авторизованы и можете писать</p>}
+      <input placeholder="Написать комментарий..." style={{ padding: 6, width: 200 }} disabled={!isAuth} />
       <button onClick={() => { shareViral(); setPosts(p => [...p, { id: p.length+1, text: 'Репост!', likes: 0, author: 'ты', date: 'сейчас' }]) }}>📤 Репост</button>
       <button onClick={triggerChaos}>🌀 {chaosLabel}</button>
       <button onClick={boostHype}>🚀 {hypeLabel}</button>
