@@ -2,16 +2,23 @@ import { useState, useEffect } from 'react'
 import { loadUser, saveUser } from './auth/session.js'
 
 function App() {
-  const subs = 44
+  const subs = 54
   const [user, setUser] = useState(() => loadUser())
+  const [loginDraft, setLoginDraft] = useState('')
+  const [authError, setAuthError] = useState('')
   const login = (name = `user_${subs}`) => {
-    const u = { id: Date.now(), name }
+    const safeName = (name || '').trim() || `user_${subs}`
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(safeName)) return setAuthError('Ник: 3-20 символов, латиница/цифры/_')
+    const u = { id: Date.now(), name: safeName }
     setUser(u)
     saveUser(u)
+    setAuthError('')
+    setLoginDraft('')
   }
   const logout = () => {
     setUser(null)
     saveUser(null)
+    setAuthError('')
   }
   const isAuth = Boolean(user)
   useEffect(() => { document.title = isAuth ? `1 Sub — @${user.name}` : '1 Sub 1 Line' }, [isAuth, user])
@@ -99,9 +106,13 @@ function App() {
           </span>
         )}
         {!isAuth ? (
-          <button type="button" onClick={() => login()}>
-            Войти
-          </button>
+          <>
+            <input placeholder="nickname" value={loginDraft} onChange={(e) => setLoginDraft(e.target.value)} style={{ padding: 6, minWidth: 120 }} />
+            <button type="button" onClick={() => login(loginDraft)}>
+              Войти
+            </button>
+            {authError && <small style={{ color: '#ff8a8a', width: '100%' }}>{authError}</small>}
+          </>
         ) : (
           <button type="button" onClick={logout}>
             Выйти
