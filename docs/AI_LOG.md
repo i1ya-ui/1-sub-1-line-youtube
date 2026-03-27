@@ -94,3 +94,9 @@
 - **Добавлено:** `backend/railway.toml` и `frontend/railway.toml` с явными build/start командами
 - **Обновлено:** `README.md` с инструкцией деплоя двух сервисов (`Root Directory`: `backend` и `frontend`)
 - **Улучшено:** Railpack больше не пытается собирать монорепу из корня без `package.json`
+
+## Frontend TS + Backend PostgreSQL
+- **Добавлено:** полный переход фронта на TypeScript (`App.tsx`, `main.tsx`, `client.ts`, `session.ts`, `types.ts`, `vite.config.ts`, `tsconfig.json`)
+- **Изменено:** frontend ESLint и scripts теперь поддерживают `ts/tsx`
+- **Добавлено (backend):** PostgreSQL через `DATABASE_URL`, автоинициализация таблицы `users`, регистрация/логин теперь читают/пишут БД
+- **Безопасность:** пароли больше не в plain text, используется хеширование (scrypt + salt)
