@@ -89,3 +89,8 @@
 - **Изменено:** backend-скрипты на TS-цикл (`build` -> `dist`, `start` из `dist`)
 - **Обновлено:** `backend/Dockerfile` теперь собирает TS в build stage и запускает `dist/index.js`
 - **Удалено:** `backend/index.js` (JS-версия)
+
+## Railway config for split services
+- **Добавлено:** `backend/railway.toml` и `frontend/railway.toml` с явными build/start командами
+- **Обновлено:** `README.md` с инструкцией деплоя двух сервисов (`Root Directory`: `backend` и `frontend`)
+- **Улучшено:** Railpack больше не пытается собирать монорепу из корня без `package.json`
