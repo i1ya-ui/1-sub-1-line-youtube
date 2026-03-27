@@ -1,6 +1,6 @@
 import type { ApiError } from '../types'
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api'
+const API_BASE = import.meta.env.VITE_API_URL || 'https://brave-mercy-production.up.railway.app/api'
 
 type RequestOptions = RequestInit & { headers?: Record<string, string> }
 
