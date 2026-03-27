@@ -1,27 +1,46 @@
 import { useState, useEffect } from 'react'
-import { loadUser, saveUser } from './auth/session.js'
+import { get, post } from './api/client.js'
+import { loadSession, saveSession } from './auth/session.js'
 
 function App() {
-  const subs = 54
-  const [user, setUser] = useState(() => loadUser())
-  const [loginDraft, setLoginDraft] = useState('')
+  const subs = 194
+  const [session, setSession] = useState(() => loadSession())
+  const [authMode, setAuthMode] = useState('login')
+  const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
-  const login = (name = `user_${subs}`) => {
-    const safeName = (name || '').trim() || `user_${subs}`
-    if (!/^[a-zA-Z0-9_]{3,20}$/.test(safeName)) return setAuthError('Ник: 3-20 символов, латиница/цифры/_')
-    const u = { id: Date.now(), name: safeName }
-    setUser(u)
-    saveUser(u)
+  const [loadingAuth, setLoadingAuth] = useState(false)
+  const user = session?.user || null
+  const token = session?.token || null
+  const authSubmit = async () => {
     setAuthError('')
-    setLoginDraft('')
+    setLoadingAuth(true)
+    try {
+      const endpoint = authMode === 'login' ? '/auth/login' : '/auth/signup'
+      const next = await post(endpoint, { name, password })
+      setSession(next)
+      saveSession(next)
+      setName('')
+      setPassword('')
+    } catch (e) {
+      setAuthError(e.message)
+    } finally {
+      setLoadingAuth(false)
+    }
   }
   const logout = () => {
-    setUser(null)
-    saveUser(null)
-    setAuthError('')
+    setSession(null)
+    saveSession(null)
   }
   const isAuth = Boolean(user)
   useEffect(() => { document.title = isAuth ? `1 Sub — @${user.name}` : '1 Sub 1 Line' }, [isAuth, user])
+  useEffect(() => {
+    if (!token) return
+    get('/auth/me', token).catch(() => {
+      setSession(null)
+      saveSession(null)
+    })
+  }, [token])
 
   const [theme, setTheme] = useState(0)
   const cycleTheme = () => setTheme((t) => (t + 1) % 3)
@@ -105,19 +124,11 @@ function App() {
             @{user.name}
           </span>
         )}
-        {!isAuth ? (
-          <>
-            <input placeholder="nickname" value={loginDraft} onChange={(e) => setLoginDraft(e.target.value)} style={{ padding: 6, minWidth: 120 }} />
-            <button type="button" onClick={() => login(loginDraft)}>
-              Войти
-            </button>
-            {authError && <small style={{ color: '#ff8a8a', width: '100%' }}>{authError}</small>}
-          </>
-        ) : (
+        {isAuth ? (
           <button type="button" onClick={logout}>
             Выйти
           </button>
-        )}
+        ) : null}
         <button type="button" onClick={cycleTheme}>
           {themeName}
         </button>
@@ -126,6 +137,20 @@ function App() {
       <p style={{ margin: 0, opacity: 0.85, width: '100%' }}>
         1 подписчик = 1 строка кода · подписчиков: {subs} · вход сохраняется в localStorage
       </p>
+      {!isAuth && (
+        <section style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => setAuthMode('login')} disabled={authMode === 'login'}>Login</button>
+            <button type="button" onClick={() => setAuthMode('signup')} disabled={authMode === 'signup'}>Signup</button>
+          </div>
+          <input placeholder="username" value={name} onChange={(e) => setName(e.target.value)} style={{ padding: 8 }} />
+          <input placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: 8 }} />
+          <button type="button" onClick={authSubmit} disabled={loadingAuth || !name.trim() || password.length < 4}>
+            {loadingAuth ? '...' : authMode === 'login' ? 'Войти' : 'Создать аккаунт'}
+          </button>
+          {authError && <small style={{ color: '#ff8a8a' }}>{authError}</small>}
+        </section>
+      )}
 
       <section style={{ width: '100%' }}>
         <h2 style={{ fontSize: '1rem', margin: '0 0 8px' }}>Лента</h2>
