@@ -42,6 +42,7 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
+  await pool.query('CREATE TABLE IF NOT EXISTS posts (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())')
 }
 
 const auth = (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
@@ -88,6 +89,17 @@ app.post('/api/auth/login', async (req: Request, res: Response<AuthResponse | { 
 app.get('/api/auth/me', auth, (req: AuthRequest, res: Response) =>
   res.json({ user: { id: req.user?.id, name: req.user?.name } }),
 )
+
+app.get('/api/posts', async (_req: Request, res: Response) => {
+  const r = await pool.query('SELECT p.id, p.body, u.name, p.created_at FROM posts p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 50')
+  res.json({ posts: r.rows.map((x) => ({ id: Number(x.id), text: x.body, author: x.name, date: x.created_at.toISOString().slice(5, 10), likes: 0 })) })
+})
+
+app.post('/api/posts', auth, async (req: AuthRequest, res: Response) => {
+  const body = (req.body?.body as string | undefined)?.trim()
+  if (!body) return res.status(400).json({ error: 'Empty' })
+  await pool.query('INSERT INTO posts (user_id, body) VALUES ($1, $2)', [req.user!.id, body]); res.json({ ok: true })
+})
 
 initDb()
   .then(() => app.listen(port, () => console.log(`Auth API on :${port}`)))
