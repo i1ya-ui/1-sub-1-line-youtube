@@ -59,3 +59,33 @@
 - **Улучшено:** auth UX стал предсказуемее: пользователь сразу видит причину отказа и может исправить ник.
 - **Компромиссы:** правило валидации пока только на клиенте; нет проверки занятости ника на сервере.
 - **Дальше:** вынести схему валидации в общий модуль и дублировать её в backend API.
+
+## +150 бонусных строк (14 дней)
+- **Добавлено:** backend auth `server/index.js` (Express + JWT): `/api/auth/signup`, `/api/auth/login`, `/api/auth/me`; Dockerfile для API: `server/Dockerfile`; proxy в `vite.config.js`; фронт подключён к backend (`src/api/client.js`, `src/auth/session.js`, `src/App.jsx`)
+- **Улучшено:** авторизация теперь реальная (клиент+сервер), сессия валидируется через `/auth/me`, при 401 выполняется logout
+- **Компромиссы:** users пока in-memory (без PostgreSQL и миграций), пароль без хеша в MVP
+- **Дальше:** подключить PostgreSQL + миграции, bcrypt, refresh token, rate limit, endpoint для профиля
+
+## Рефактор структуры (frontend/backend)
+- **Добавлено:** новая структура верхнего уровня: `frontend/*` и `backend/*`
+- **Перенесено:** клиент (`index.html`, `vite.config.js`, `src/*`, Dockerfile) в `frontend`; API (`index.js`, Dockerfile) в `backend`
+- **Изменено:** корневые npm-скрипты теперь запускают `frontend` и `backend` по новым путям
+- **Результат:** фронт и бэк физически разделены, проще масштабировать и деплоить отдельно
+
+## Разделение зависимостей (frontend/backend)
+- **Добавлено:** отдельные `frontend/package.json` и `backend/package.json`
+- **Изменено:** корневой `package.json` стал оркестратором через `npm --prefix ...`
+- **Исправлено:** `frontend/vite.config.js` без `root`; Dockerfile'ы используют локальные `package*.json`
+- **Результат:** frontend/backend теперь независимы по зависимостям и сборке
+
+## Удаление root package
+- **Удалено:** корневые `package.json`, `package-lock.json`, `.eslintrc.cjs`, `.prettierrc`
+- **Изменено:** запуск только из `frontend` и `backend` без общего оркестратора
+- **Обновлено:** `README.md` под автономные команды
+- **Результат:** полностью раздельные приложения по пакетам и конфигам
+
+## Backend -> TypeScript
+- **Добавлено:** `backend/src/index.ts` и `backend/tsconfig.json`
+- **Изменено:** backend-скрипты на TS-цикл (`build` -> `dist`, `start` из `dist`)
+- **Обновлено:** `backend/Dockerfile` теперь собирает TS в build stage и запускает `dist/index.js`
+- **Удалено:** `backend/index.js` (JS-версия)

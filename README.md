@@ -57,5 +57,6 @@ Youtube: [@frontend_vibe](https://www.youtube.com/channel/UCSOE1Vso4GeiGfr2quhzQ
 ## Run locally
 
 ```bash
-npm install
-npm run dev
+cd backend && npm install && npm run dev
+cd frontend && npm install && npm run dev
+```
