@@ -9,7 +9,7 @@ type PostItem = { id: number; text: string; likes: number; author: string; date:
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 194
+  const subs = 55
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -54,6 +54,8 @@ function App() {
     })
   }, [token])
 
+  useEffect(() => { get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {}) }, [])
+
   const [theme, setTheme] = useState(0)
   const cycleTheme = () => setTheme((t) => (t + 1) % 3)
   const themeName = ['Тёмная', 'Светлая', 'Матрица'][theme]
@@ -78,14 +80,7 @@ function App() {
   const addDM = () => isAuth && setDms((d) => [...d, `ЛС от @${user?.name} #${d.length + 1}`].slice(-5))
 
   const [commentDraft, setCommentDraft] = useState('')
-  const addCommentAsPost = () => {
-    if (!isAuth || !commentDraft.trim() || !user) return
-    setPosts((p) => [
-      { id: p.length + 1, text: commentDraft.trim(), likes: 0, author: user.name, date: 'сейчас' },
-      ...p,
-    ])
-    setCommentDraft('')
-  }
+  const addCommentAsPost = async () => { if (!isAuth || !commentDraft.trim() || !token) return; await post('/posts', { body: commentDraft.trim() }, token); setPosts((await get<{ posts: PostItem[] }>('/posts')).posts); setCommentDraft('') }
 
   const bgStyle =
     theme === 0
