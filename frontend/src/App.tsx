@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { get, post } from './api/client'
+import { get, patch, post } from './api/client'
 import { loadSession, saveSession } from './auth/session'
 import type { Session } from './types'
 
@@ -9,7 +9,7 @@ type PostItem = { id: number; text: string; likes: number; author: string; date:
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 55
+  const subs = 63
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -65,8 +65,16 @@ function App() {
     { id: 2, text: 'Кто тут?', likes: 0, author: 'random_dev', date: '19.03' },
     { id: 3, text: 'Подписывайтесь!', likes: 0, author: 'user_1', date: '18.03' },
   ])
-  const likePost = (id: number) =>
+  const likePost = async (id: number) => {
     setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: p.likes + 1 } : p)))
+    if (!token) return
+    try {
+      await patch('/posts/' + id + '/like', {}, token)
+      setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
+    } catch {
+      /* keep optimistic count */
+    }
+  }
 
   const [profiles] = useState<Profile[]>([
     { id: 1, name: 'user_1', avatar: '🦊', bio: 'Лис в сети' },

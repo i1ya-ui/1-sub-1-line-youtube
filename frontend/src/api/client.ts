@@ -20,3 +20,10 @@ export const post = <T>(path: string, body: unknown, token?: string) =>
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   })
+
+export const patch = <T>(path: string, body: unknown, token?: string) =>
+  request<T>(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(body),
+  })
