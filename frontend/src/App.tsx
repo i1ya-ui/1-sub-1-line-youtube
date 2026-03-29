@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { get, patch, post } from './api/client'
+import { MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
 import type { Session } from './types'
 
@@ -88,7 +89,13 @@ function App() {
   const addDM = () => isAuth && setDms((d) => [...d, `ЛС от @${user?.name} #${d.length + 1}`].slice(-5))
 
   const [commentDraft, setCommentDraft] = useState('')
-  const addCommentAsPost = async () => { if (!isAuth || !commentDraft.trim() || !token) return; await post('/posts', { body: commentDraft.trim() }, token); setPosts((await get<{ posts: PostItem[] }>('/posts')).posts); setCommentDraft('') }
+  const addCommentAsPost = async () => {
+    if (!isAuth || !commentDraft.trim() || !token) return
+    if (commentDraft.trim().length > MAX_POST_BODY) return
+    await post('/posts', { body: commentDraft.trim() }, token)
+    setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
+    setCommentDraft('')
+  }
 
   const bgStyle =
     theme === 0
@@ -166,8 +173,9 @@ function App() {
 
       {!isAuth && <p style={{ opacity: 0.85, margin: 0, width: '100%' }}>Войдите, чтобы писать в чат, в ЛС и публиковать пост.</p>}
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input placeholder="Новый пост (после входа)" value={commentDraft} onChange={(e) => setCommentDraft(e.target.value)} disabled={!isAuth} style={{ padding: 8 }} />
-        <button type="button" onClick={addCommentAsPost} disabled={!isAuth || !commentDraft.trim()}>Опубликовать</button>
+        <input placeholder="Новый пост (после входа)" value={commentDraft} maxLength={MAX_POST_BODY} onChange={(e) => setCommentDraft(e.target.value)} disabled={!isAuth} style={{ padding: 8 }} />
+        <small style={{ opacity: 0.75 }}>{commentDraft.length}/{MAX_POST_BODY}</small>
+        <button type="button" onClick={addCommentAsPost} disabled={!isAuth || !commentDraft.trim() || commentDraft.trim().length > MAX_POST_BODY}>Опубликовать</button>
       </div>
     </div>
   )
