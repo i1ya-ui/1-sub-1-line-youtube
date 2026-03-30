@@ -10,7 +10,7 @@ type PostItem = { id: number; text: string; likes: number; author: string; date:
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 63
+  const subs = 64
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -89,12 +89,25 @@ function App() {
   const addDM = () => isAuth && setDms((d) => [...d, `ЛС от @${user?.name} #${d.length + 1}`].slice(-5))
 
   const [commentDraft, setCommentDraft] = useState('')
+  const [postError, setPostError] = useState('')
+  const [posting, setPosting] = useState(false)
+  useEffect(() => {
+    setPostError('')
+  }, [commentDraft])
   const addCommentAsPost = async () => {
     if (!isAuth || !commentDraft.trim() || !token) return
     if (commentDraft.trim().length > MAX_POST_BODY) return
-    await post('/posts', { body: commentDraft.trim() }, token)
-    setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
-    setCommentDraft('')
+    setPostError('')
+    setPosting(true)
+    try {
+      await post('/posts', { body: commentDraft.trim() }, token)
+      setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
+      setCommentDraft('')
+    } catch (e) {
+      setPostError(e instanceof Error ? e.message : 'Ошибка публикации')
+    } finally {
+      setPosting(false)
+    }
   }
 
   const bgStyle =
@@ -173,9 +186,10 @@ function App() {
 
       {!isAuth && <p style={{ opacity: 0.85, margin: 0, width: '100%' }}>Войдите, чтобы писать в чат, в ЛС и публиковать пост.</p>}
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input placeholder="Новый пост (после входа)" value={commentDraft} maxLength={MAX_POST_BODY} onChange={(e) => setCommentDraft(e.target.value)} disabled={!isAuth} style={{ padding: 8 }} />
+        <input placeholder="Новый пост (после входа)" value={commentDraft} maxLength={MAX_POST_BODY} onChange={(e) => setCommentDraft(e.target.value)} disabled={!isAuth} readOnly={posting} aria-busy={posting} style={{ padding: 8 }} />
         <small style={{ opacity: 0.75 }}>{commentDraft.length}/{MAX_POST_BODY}</small>
-        <button type="button" onClick={addCommentAsPost} disabled={!isAuth || !commentDraft.trim() || commentDraft.trim().length > MAX_POST_BODY}>Опубликовать</button>
+        {postError ? <small style={{ color: '#ff8a8a' }}>{postError}</small> : null}
+        <button type="button" onClick={addCommentAsPost} disabled={!isAuth || !commentDraft.trim() || commentDraft.trim().length > MAX_POST_BODY || posting} aria-busy={posting}>{posting ? '...' : 'Опубликовать'}</button>
       </div>
     </div>
   )
