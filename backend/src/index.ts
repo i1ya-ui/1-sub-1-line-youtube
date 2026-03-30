@@ -92,6 +92,16 @@ app.get('/api/auth/me', auth, (req: AuthRequest, res: Response) =>
   res.json({ user: { id: req.user?.id, name: req.user?.name } }),
 )
 
+app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }))
+
+app.get('/api/users/:name', async (req: Request, res: Response) => {
+  const name = (req.params.name as string | undefined)?.trim()
+  if (!name) return res.status(400).json({ error: 'Bad name' })
+  const r = await pool.query<{ id: number; name: string }>('SELECT id, name FROM users WHERE name = $1', [name])
+  if (!r.rowCount) return res.status(404).json({ error: 'Not found' })
+  return res.json({ user: r.rows[0] })
+})
+
 app.get('/api/posts', async (_req: Request, res: Response) => {
   const r = await pool.query('SELECT p.id, p.body, u.name, p.created_at, p.likes FROM posts p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 50')
   res.json({ posts: r.rows.map((x) => ({ id: Number(x.id), text: x.body, author: x.name, date: x.created_at.toISOString().slice(5, 10), likes: Number(x.likes) || 0 })) })
