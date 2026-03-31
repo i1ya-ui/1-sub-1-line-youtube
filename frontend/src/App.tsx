@@ -10,7 +10,7 @@ type PostItem = { id: number; text: string; likes: number; author: string; date:
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 64
+  const subs = 68
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -56,6 +56,15 @@ function App() {
   }, [token])
 
   useEffect(() => { get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {}) }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {})
+    }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [])
 
   const [theme, setTheme] = useState(0)
   const cycleTheme = () => setTheme((t) => (t + 1) % 3)
