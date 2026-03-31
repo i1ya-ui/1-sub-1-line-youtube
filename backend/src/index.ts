@@ -9,14 +9,21 @@ type AuthResponse = { token: string; user: { id: number; name: string } }
 type AuthRequest = Request & { user?: JwtPayload & { id: number; name: string } }
 
 const app = express()
+app.disable('x-powered-by')
 const port = Number(process.env.PORT || 3001)
 const secret = process.env.JWT_SECRET || 'dev-secret'
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173'
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const MAX_POST_BODY = 2000
+const NAME_RE = /^[a-zA-Z0-9_]{3,20}$/
 
 app.use(cors({ origin: corsOrigin }))
-app.use(express.json())
+app.use(express.json({ limit: '256kb' }))
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  next()
+})
 
 const sign = (user: UserRecord): string =>
   jwt.sign({ id: user.id, name: user.name }, secret, { expiresIn: '7d' })
@@ -45,6 +52,7 @@ async function initDb() {
   `)
   await pool.query('CREATE TABLE IF NOT EXISTS posts (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())')
   await pool.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS likes INT NOT NULL DEFAULT 0')
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC)')
 }
 
 const auth = (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
@@ -64,6 +72,8 @@ app.post('/api/auth/signup', async (req: Request, res: Response<AuthResponse | {
   const name = (req.body?.name as string | undefined)?.trim()
   const password = req.body?.password as string | undefined
   if (!name || !password || password.length < 4) return res.status(400).json({ error: 'Bad credentials' })
+  if (!NAME_RE.test(name)) return res.status(400).json({ error: 'Bad name' })
+  if (password.length > 128) return res.status(400).json({ error: 'Bad credentials' })
   const exists = await pool.query<UserRecord>('SELECT id, name, password_hash FROM users WHERE name = $1', [name])
   if (exists.rowCount) return res.status(409).json({ error: 'User exists' })
   const password_hash = hashPassword(password)
@@ -78,6 +88,7 @@ app.post('/api/auth/signup', async (req: Request, res: Response<AuthResponse | {
 app.post('/api/auth/login', async (req: Request, res: Response<AuthResponse | { error: string }>) => {
   const name = (req.body?.name as string | undefined)?.trim()
   const password = req.body?.password as string | undefined
+  if (name && !NAME_RE.test(name)) return res.status(400).json({ error: 'Bad name' })
   const found = name
     ? await pool.query<UserRecord>('SELECT id, name, password_hash FROM users WHERE name = $1', [name])
     : null
@@ -92,7 +103,14 @@ app.get('/api/auth/me', auth, (req: AuthRequest, res: Response) =>
   res.json({ user: { id: req.user?.id, name: req.user?.name } }),
 )
 
-app.get('/api/health', (_req: Request, res: Response) => res.json({ ok: true }))
+app.get('/api/health', async (_req: Request, res: Response) => {
+  try {
+    await pool.query('SELECT 1')
+    res.json({ ok: true, db: true })
+  } catch {
+    res.status(503).json({ ok: false, db: false })
+  }
+})
 
 app.get('/api/users/:name', async (req: Request, res: Response) => {
   const name = (req.params.name as string | undefined)?.trim()
@@ -111,7 +129,11 @@ app.post('/api/posts', auth, async (req: AuthRequest, res: Response) => {
   const body = (req.body?.body as string | undefined)?.trim()
   if (!body) return res.status(400).json({ error: 'Empty' })
   if (body.length > MAX_POST_BODY) return res.status(400).json({ error: 'Too long' })
-  await pool.query('INSERT INTO posts (user_id, body) VALUES ($1, $2)', [req.user!.id, body]); res.json({ ok: true })
+  const ins = await pool.query<{ id: string }>(
+    'INSERT INTO posts (user_id, body) VALUES ($1, $2) RETURNING id',
+    [req.user!.id, body],
+  )
+  res.json({ ok: true, id: Number(ins.rows[0].id) })
 })
 
 app.patch('/api/posts/:id/like', auth, async (req: AuthRequest, res: Response) => {
