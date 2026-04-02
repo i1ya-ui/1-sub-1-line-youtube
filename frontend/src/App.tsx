@@ -10,7 +10,7 @@ type PostItem = { id: number; text: string; likes: number; author: string; date:
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 68
+  const subs = 70
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -55,7 +55,23 @@ function App() {
     })
   }, [token])
 
-  useEffect(() => { get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {}) }, [])
+  const [postsLoading, setPostsLoading] = useState(true)
+  useEffect(() => {
+    setPostsLoading(true)
+    get<{ posts: PostItem[] }>('/posts')
+      .then((d) => setPosts(d.posts))
+      .catch(() => {})
+      .finally(() => setPostsLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return
+      get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {})
+    }
+    document.addEventListener('visibilitychange', refresh)
+    return () => document.removeEventListener('visibilitychange', refresh)
+  }, [])
 
   useEffect(() => {
     const refresh = () => {
@@ -143,8 +159,8 @@ function App() {
             <button type="button" onClick={() => setAuthMode('login')} disabled={authMode === 'login'}>Login</button>
             <button type="button" onClick={() => setAuthMode('signup')} disabled={authMode === 'signup'}>Signup</button>
           </div>
-          <input placeholder="username" value={name} onChange={(e) => setName(e.target.value)} style={{ padding: 8 }} />
-          <input placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: 8 }} />
+          <input autoComplete="username" placeholder="username" value={name} onChange={(e) => setName(e.target.value)} style={{ padding: 8 }} />
+          <input autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} placeholder="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: 8 }} />
           <button type="button" onClick={authSubmit} disabled={loadingAuth || !name.trim() || password.length < 4}>
             {loadingAuth ? '...' : authMode === 'login' ? 'Войти' : 'Создать аккаунт'}
           </button>
@@ -152,6 +168,7 @@ function App() {
         </section>
       )}
 
+      {postsLoading ? <p style={{ margin: 0, opacity: 0.85, width: '100%' }}>Загрузка ленты…</p> : null}
       <section style={{ width: '100%' }}>
         <h2 style={{ fontSize: '1rem', margin: '0 0 8px' }}>Лента</h2>
         {posts.map((p) => (
@@ -195,7 +212,7 @@ function App() {
 
       {!isAuth && <p style={{ opacity: 0.85, margin: 0, width: '100%' }}>Войдите, чтобы писать в чат, в ЛС и публиковать пост.</p>}
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <input placeholder="Новый пост (после входа)" value={commentDraft} maxLength={MAX_POST_BODY} onChange={(e) => setCommentDraft(e.target.value)} disabled={!isAuth} readOnly={posting} aria-busy={posting} style={{ padding: 8 }} />
+        <input placeholder="Новый пост (после входа)" value={commentDraft} maxLength={MAX_POST_BODY} title="Ctrl+Enter или ⌘+Enter — опубликовать" onChange={(e) => setCommentDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void addCommentAsPost() } }} disabled={!isAuth} readOnly={posting} aria-busy={posting} style={{ padding: 8 }} />
         <small style={{ opacity: 0.75 }}>{commentDraft.length}/{MAX_POST_BODY}</small>
         {postError ? <small style={{ color: '#ff8a8a' }}>{postError}</small> : null}
         <button type="button" onClick={addCommentAsPost} disabled={!isAuth || !commentDraft.trim() || commentDraft.trim().length > MAX_POST_BODY || posting} aria-busy={posting}>{posting ? '...' : 'Опубликовать'}</button>

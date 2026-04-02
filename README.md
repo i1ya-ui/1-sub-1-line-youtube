@@ -6,7 +6,7 @@ AI пишет стартап на основе подписчиков на Youtu
 
 ## Experiment Stats
 
-Subscribers: 68
+Subscribers: 70
 
 ## Rules
 
