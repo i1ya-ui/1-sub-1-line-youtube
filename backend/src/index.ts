@@ -53,6 +53,10 @@ async function initDb() {
   await pool.query('CREATE TABLE IF NOT EXISTS posts (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())')
   await pool.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS likes INT NOT NULL DEFAULT 0')
   await pool.query('CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC)')
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS post_likes (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, PRIMARY KEY (user_id, post_id))',
+  )
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes (post_id)')
 }
 
 const auth = (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
@@ -139,8 +143,12 @@ app.post('/api/posts', auth, async (req: AuthRequest, res: Response) => {
 app.patch('/api/posts/:id/like', auth, async (req: AuthRequest, res: Response) => {
   const id = Number(req.params.id)
   if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' })
-  await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1', [id])
-  res.json({ ok: true })
+  const ins = await pool.query(
+    'INSERT INTO post_likes (user_id, post_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING 1',
+    [req.user!.id, id],
+  )
+  if (ins.rowCount) await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1', [id])
+  res.json({ ok: true, liked: Boolean(ins.rowCount) })
 })
 
 initDb()

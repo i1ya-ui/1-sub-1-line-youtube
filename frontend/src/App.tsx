@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { get, patch, post } from './api/client'
 import { MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
@@ -10,7 +10,7 @@ type PostItem = { id: number; text: string; likes: number; author: string; date:
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 70
+  const subs = 71;
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -56,31 +56,33 @@ function App() {
   }, [token])
 
   const [postsLoading, setPostsLoading] = useState(true)
-  useEffect(() => {
-    setPostsLoading(true)
+  const [postsFetchError, setPostsFetchError] = useState('')
+  const fetchFeed = useCallback((opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
+    if (!silent) {
+      setPostsLoading(true)
+      setPostsFetchError('')
+    }
     get<{ posts: PostItem[] }>('/posts')
       .then((d) => setPosts(d.posts))
-      .catch(() => {})
-      .finally(() => setPostsLoading(false))
+      .catch(() => {
+        if (!silent) setPostsFetchError('Не удалось загрузить ленту')
+      })
+      .finally(() => {
+        if (!silent) setPostsLoading(false)
+      })
   }, [])
-
+  useEffect(() => {
+    fetchFeed()
+  }, [fetchFeed])
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== 'visible') return
-      get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {})
+      fetchFeed({ silent: true })
     }
     document.addEventListener('visibilitychange', refresh)
     return () => document.removeEventListener('visibilitychange', refresh)
-  }, [])
-
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState !== 'visible') return
-      get<{ posts: PostItem[] }>('/posts').then((d) => setPosts(d.posts)).catch(() => {})
-    }
-    document.addEventListener('visibilitychange', refresh)
-    return () => document.removeEventListener('visibilitychange', refresh)
-  }, [])
+  }, [fetchFeed])
 
   const [theme, setTheme] = useState(0)
   const cycleTheme = () => setTheme((t) => (t + 1) % 3)
@@ -95,10 +97,14 @@ function App() {
     setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: p.likes + 1 } : p)))
     if (!token) return
     try {
-      await patch('/posts/' + id + '/like', {}, token)
+      const r = await patch<{ ok: boolean; liked: boolean }>('/posts/' + id + '/like', {}, token)
+      if (!r.liked) {
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1) } : p)))
+        return
+      }
       setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
     } catch {
-      /* keep optimistic count */
+      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1) } : p)))
     }
   }
 
@@ -169,8 +175,19 @@ function App() {
       )}
 
       {postsLoading ? <p style={{ margin: 0, opacity: 0.85, width: '100%' }}>Загрузка ленты…</p> : null}
+      {postsFetchError ? (
+        <div role="alert" style={{ width: '100%', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          <small style={{ color: '#ff8a8a' }}>{postsFetchError}</small>
+          <button type="button" onClick={() => fetchFeed()}>Повторить</button>
+        </div>
+      ) : null}
       <section style={{ width: '100%' }}>
-        <h2 style={{ fontSize: '1rem', margin: '0 0 8px' }}>Лента</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+          <h2 style={{ fontSize: '1rem', margin: 0 }}>Лента</h2>
+          <button type="button" onClick={() => fetchFeed()} disabled={postsLoading} aria-busy={postsLoading}>
+            Обновить
+          </button>
+        </div>
         {posts.map((p) => (
           <article key={p.id} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
             <small>{p.author} · {p.date}</small>
