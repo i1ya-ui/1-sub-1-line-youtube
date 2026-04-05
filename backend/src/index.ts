@@ -15,6 +15,7 @@ const secret = process.env.JWT_SECRET || 'dev-secret'
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173'
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const MAX_POST_BODY = 2000
+const MAX_COMMENT_BODY = 500
 const NAME_RE = /^[a-zA-Z0-9_]{3,20}$/
 
 app.use(cors({ origin: corsOrigin }))
@@ -57,6 +58,10 @@ async function initDb() {
     'CREATE TABLE IF NOT EXISTS post_likes (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, PRIMARY KEY (user_id, post_id))',
   )
   await pool.query('CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes (post_id)')
+  await pool.query(
+    'CREATE TABLE IF NOT EXISTS comments (id BIGSERIAL PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())',
+  )
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_comments_post ON comments (post_id, created_at DESC)')
 }
 
 const auth = (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
@@ -139,8 +144,15 @@ app.get('/api/posts', async (req: Request, res: Response) => {
     `SELECT p.id, p.body, u.name, p.created_at, p.likes,
       CASE WHEN $1::bigint IS NULL THEN false ELSE EXISTS (
         SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1
-      ) END AS liked
-     FROM posts p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 50`,
+      ) END AS liked,
+      COALESCE(com.j, '[]'::json) AS comments
+     FROM posts p JOIN users u ON u.id = p.user_id
+     LEFT JOIN LATERAL (
+       SELECT json_agg(json_build_object('id', ci.id, 'author', u2.name, 'text', ci.body) ORDER BY ci.created_at DESC) AS j
+       FROM (SELECT * FROM comments WHERE post_id = p.id ORDER BY created_at DESC LIMIT 12) ci
+       JOIN users u2 ON u2.id = ci.user_id
+     ) com ON true
+     ORDER BY p.created_at DESC LIMIT 50`,
     [uid],
   )
   res.json({
@@ -151,6 +163,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
       date: x.created_at.toISOString().slice(5, 10),
       likes: Number(x.likes) || 0,
       liked: Boolean(x.liked),
+      comments: Array.isArray(x.comments) ? x.comments : [],
     })),
   })
 })
@@ -175,6 +188,18 @@ app.patch('/api/posts/:id/like', auth, async (req: AuthRequest, res: Response) =
   )
   if (ins.rowCount) await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1', [id])
   res.json({ ok: true, liked: Boolean(ins.rowCount) })
+})
+
+app.post('/api/posts/:id/comments', auth, async (req: AuthRequest, res: Response) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id)) return res.status(400).json({ error: 'Bad id' })
+  const body = (req.body?.body as string | undefined)?.trim()
+  if (!body) return res.status(400).json({ error: 'Empty' })
+  if (body.length > MAX_COMMENT_BODY) return res.status(400).json({ error: 'Too long' })
+  const ex = await pool.query('SELECT 1 FROM posts WHERE id = $1', [id])
+  if (!ex.rowCount) return res.status(404).json({ error: 'Not found' })
+  await pool.query('INSERT INTO comments (post_id, user_id, body) VALUES ($1, $2, $3)', [id, req.user!.id, body])
+  res.json({ ok: true })
 })
 
 initDb()
