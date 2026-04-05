@@ -6,11 +6,11 @@ import type { Session } from './types'
 
 type AuthMode = 'login' | 'signup'
 type AuthResponse = Session
-type PostItem = { id: number; text: string; likes: number; author: string; date: string }
+type PostItem = { id: number; text: string; likes: number; author: string; date: string; liked?: boolean }
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 71;
+  const subs = 80
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -63,7 +63,7 @@ function App() {
       setPostsLoading(true)
       setPostsFetchError('')
     }
-    get<{ posts: PostItem[] }>('/posts')
+    get<{ posts: PostItem[] }>('/posts', token ?? undefined)
       .then((d) => setPosts(d.posts))
       .catch(() => {
         if (!silent) setPostsFetchError('Не удалось загрузить ленту')
@@ -71,7 +71,7 @@ function App() {
       .finally(() => {
         if (!silent) setPostsLoading(false)
       })
-  }, [])
+  }, [token])
   useEffect(() => {
     fetchFeed()
   }, [fetchFeed])
@@ -93,18 +93,22 @@ function App() {
     { id: 2, text: 'Кто тут?', likes: 0, author: 'random_dev', date: '19.03' },
     { id: 3, text: 'Подписывайтесь!', likes: 0, author: 'user_1', date: '18.03' },
   ])
-  const likePost = async (id: number) => {
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: p.likes + 1 } : p)))
-    if (!token) return
+  const likePost = async (id: number, already: boolean) => {
+    if (already) return
+    if (!token) {
+      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: p.likes + 1 } : p)))
+      return
+    }
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: p.likes + 1, liked: true } : p)))
     try {
       const r = await patch<{ ok: boolean; liked: boolean }>('/posts/' + id + '/like', {}, token)
       if (!r.liked) {
-        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1) } : p)))
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1), liked: false } : p)))
         return
       }
-      setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
+      setPosts((await get<{ posts: PostItem[] }>('/posts', token)).posts)
     } catch {
-      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1) } : p)))
+      setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1), liked: false } : p)))
     }
   }
 
@@ -132,7 +136,7 @@ function App() {
     setPosting(true)
     try {
       await post('/posts', { body: commentDraft.trim() }, token)
-      setPosts((await get<{ posts: PostItem[] }>('/posts')).posts)
+      setPosts((await get<{ posts: PostItem[] }>('/posts', token)).posts)
       setCommentDraft('')
     } catch (e) {
       setPostError(e instanceof Error ? e.message : 'Ошибка публикации')
@@ -192,7 +196,9 @@ function App() {
           <article key={p.id} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
             <small>{p.author} · {p.date}</small>
             <p style={{ margin: '6px 0' }}>{p.text}</p>
-            <button type="button" onClick={() => likePost(p.id)}>❤️ {p.likes}</button>
+            <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
+              {p.liked ? '❤️' : '🤍'} {p.likes}
+            </button>
           </article>
         ))}
       </section>
