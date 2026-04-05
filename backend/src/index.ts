@@ -124,9 +124,35 @@ app.get('/api/users/:name', async (req: Request, res: Response) => {
   return res.json({ user: r.rows[0] })
 })
 
-app.get('/api/posts', async (_req: Request, res: Response) => {
-  const r = await pool.query('SELECT p.id, p.body, u.name, p.created_at, p.likes FROM posts p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 50')
-  res.json({ posts: r.rows.map((x) => ({ id: Number(x.id), text: x.body, author: x.name, date: x.created_at.toISOString().slice(5, 10), likes: Number(x.likes) || 0 })) })
+app.get('/api/posts', async (req: Request, res: Response) => {
+  let uid: number | null = null
+  const raw = req.headers.authorization?.replace('Bearer ', '')
+  if (raw) {
+    try {
+      const p = jwt.verify(raw, secret)
+      if (typeof p !== 'string') uid = Number((p as JwtPayload & { id: number }).id) || null
+    } catch {
+      uid = null
+    }
+  }
+  const r = await pool.query(
+    `SELECT p.id, p.body, u.name, p.created_at, p.likes,
+      CASE WHEN $1::bigint IS NULL THEN false ELSE EXISTS (
+        SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1
+      ) END AS liked
+     FROM posts p JOIN users u ON u.id = p.user_id ORDER BY p.created_at DESC LIMIT 50`,
+    [uid],
+  )
+  res.json({
+    posts: r.rows.map((x) => ({
+      id: Number(x.id),
+      text: x.body,
+      author: x.name,
+      date: x.created_at.toISOString().slice(5, 10),
+      likes: Number(x.likes) || 0,
+      liked: Boolean(x.liked),
+    })),
+  })
 })
 
 app.post('/api/posts', auth, async (req: AuthRequest, res: Response) => {
