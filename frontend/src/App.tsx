@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { get, patch, post } from './api/client'
-import { MAX_POST_BODY } from './constants'
+import { MAX_COMMENT_BODY, MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
 import type { Session } from './types'
 
 type AuthMode = 'login' | 'signup'
 type AuthResponse = Session
-type PostItem = { id: number; text: string; likes: number; author: string; date: string; liked?: boolean }
+type Cmt = { id: number; author: string; text: string }
+type PostItem = { id: number; text: string; likes: number; author: string; date: string; liked?: boolean; comments?: Cmt[] }
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 80
+  const subs = 82
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -93,6 +94,19 @@ function App() {
     { id: 2, text: 'Кто тут?', likes: 0, author: 'random_dev', date: '19.03' },
     { id: 3, text: 'Подписывайтесь!', likes: 0, author: 'user_1', date: '18.03' },
   ])
+  const [cText, setCText] = useState<Record<number, string>>({})
+  const sendComment = async (postId: number) => {
+    const t = (cText[postId] || '').trim()
+    if (!token || !t || t.length > MAX_COMMENT_BODY) return
+    try {
+      await post(`/posts/${postId}/comments`, { body: t }, token)
+      setCText((m) => ({ ...m, [postId]: '' }))
+      setPosts((await get<{ posts: PostItem[] }>('/posts', token)).posts)
+    } catch {
+      /* noop */
+    }
+  }
+
   const likePost = async (id: number, already: boolean) => {
     if (already) return
     if (!token) {
@@ -199,6 +213,13 @@ function App() {
             <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
               {p.liked ? '❤️' : '🤍'} {p.likes}
             </button>
+            {(p.comments ?? []).map((c) => (
+              <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92 }}><b>@{c.author}</b> {c.text}</div>
+            ))}
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <input placeholder="Комментарий" value={cText[p.id] || ''} maxLength={MAX_COMMENT_BODY} onChange={(e) => setCText((m) => ({ ...m, [p.id]: e.target.value }))} disabled={!isAuth} style={{ flex: 1, padding: 6 }} />
+              <button type="button" onClick={() => void sendComment(p.id)} disabled={!isAuth || !(cText[p.id] || '').trim()}>Ок</button>
+            </div>
           </article>
         ))}
       </section>
