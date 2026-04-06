@@ -142,6 +142,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
   }
   const r = await pool.query(
     `SELECT p.id, p.body, u.name, p.created_at, p.likes,
+      (SELECT COUNT(*)::int FROM comments c WHERE c.post_id = p.id) AS comment_count,
       CASE WHEN $1::bigint IS NULL THEN false ELSE EXISTS (
         SELECT 1 FROM post_likes pl WHERE pl.post_id = p.id AND pl.user_id = $1
       ) END AS liked,
@@ -162,6 +163,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
       author: x.name,
       date: x.created_at.toISOString().slice(5, 10),
       likes: Number(x.likes) || 0,
+      commentCount: Number(x.comment_count) || 0,
       liked: Boolean(x.liked),
       comments: Array.isArray(x.comments) ? x.comments : [],
     })),

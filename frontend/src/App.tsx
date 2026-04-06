@@ -7,11 +7,20 @@ import type { Session } from './types'
 type AuthMode = 'login' | 'signup'
 type AuthResponse = Session
 type Cmt = { id: number; author: string; text: string }
-type PostItem = { id: number; text: string; likes: number; author: string; date: string; liked?: boolean; comments?: Cmt[] }
+type PostItem = {
+  id: number
+  text: string
+  likes: number
+  author: string
+  date: string
+  liked?: boolean
+  comments?: Cmt[]
+  commentCount?: number
+}
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 82
+  const subs = 86
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -95,15 +104,21 @@ function App() {
     { id: 3, text: 'Подписывайтесь!', likes: 0, author: 'user_1', date: '18.03' },
   ])
   const [cText, setCText] = useState<Record<number, string>>({})
+  const [cErr, setCErr] = useState<Record<number, string>>({})
+  const [cPosting, setCPosting] = useState<number | null>(null)
   const sendComment = async (postId: number) => {
     const t = (cText[postId] || '').trim()
     if (!token || !t || t.length > MAX_COMMENT_BODY) return
+    setCErr((m) => ({ ...m, [postId]: '' }))
+    setCPosting(postId)
     try {
       await post(`/posts/${postId}/comments`, { body: t }, token)
       setCText((m) => ({ ...m, [postId]: '' }))
       setPosts((await get<{ posts: PostItem[] }>('/posts', token)).posts)
-    } catch {
-      /* noop */
+    } catch (e) {
+      setCErr((m) => ({ ...m, [postId]: e instanceof Error ? e.message : 'Не удалось отправить' }))
+    } finally {
+      setCPosting(null)
     }
   }
 
@@ -208,7 +223,7 @@ function App() {
         </div>
         {posts.map((p) => (
           <article key={p.id} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
-            <small>{p.author} · {p.date}</small>
+            <small>{p.author} · {p.date} · 💬 {p.commentCount ?? (p.comments?.length ?? 0)}</small>
             <p style={{ margin: '6px 0' }}>{p.text}</p>
             <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
               {p.liked ? '❤️' : '🤍'} {p.likes}
@@ -216,9 +231,18 @@ function App() {
             {(p.comments ?? []).map((c) => (
               <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92 }}><b>@{c.author}</b> {c.text}</div>
             ))}
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <input placeholder="Комментарий" value={cText[p.id] || ''} maxLength={MAX_COMMENT_BODY} onChange={(e) => setCText((m) => ({ ...m, [p.id]: e.target.value }))} disabled={!isAuth} style={{ flex: 1, padding: 6 }} />
-              <button type="button" onClick={() => void sendComment(p.id)} disabled={!isAuth || !(cText[p.id] || '').trim()}>Ок</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="Комментарий" value={cText[p.id] || ''} maxLength={MAX_COMMENT_BODY} title="Enter — отправить" readOnly={cPosting === p.id} onChange={(e) => { setCText((m) => ({ ...m, [p.id]: e.target.value })); setCErr((m) => ({ ...m, [p.id]: '' })) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void sendComment(p.id) } }} disabled={!isAuth} style={{ flex: 1, padding: 6 }} />
+                <button type="button" onClick={() => void sendComment(p.id)} disabled={!isAuth || !(cText[p.id] || '').trim() || cPosting === p.id} aria-busy={cPosting === p.id}>{cPosting === p.id ? '...' : 'Ок'}</button>
+              </div>
+              <small style={{ opacity: 0.75 }}>{(cText[p.id] || '').length}/{MAX_COMMENT_BODY}</small>
+              {cErr[p.id] ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <small style={{ color: '#ff8a8a' }}>{cErr[p.id]}</small>
+                  <button type="button" onClick={() => void sendComment(p.id)} disabled={cPosting === p.id || !(cText[p.id] || '').trim()}>Повторить</button>
+                </div>
+              ) : null}
             </div>
           </article>
         ))}
