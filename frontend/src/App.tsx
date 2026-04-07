@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { get, patch, post } from './api/client'
+import { del, get, patch, post } from './api/client'
 import { MAX_COMMENT_BODY, MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
 import type { Session } from './types'
 
 type AuthMode = 'login' | 'signup'
 type AuthResponse = Session
-type Cmt = { id: number; author: string; text: string }
+type Cmt = { id: number; author: string; text: string; userId?: number }
 type PostItem = {
   id: number
   text: string
@@ -20,7 +20,7 @@ type PostItem = {
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
 function App() {
-  const subs = 86
+  const subs = 87
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -119,6 +119,16 @@ function App() {
       setCErr((m) => ({ ...m, [postId]: e instanceof Error ? e.message : 'Не удалось отправить' }))
     } finally {
       setCPosting(null)
+    }
+  }
+
+  const deleteComment = async (postId: number, commentId: number) => {
+    if (!token) return
+    try {
+      await del(`/posts/${postId}/comments/${commentId}`, token)
+      setPosts((await get<{ posts: PostItem[] }>('/posts', token)).posts)
+    } catch {
+      /* noop */
     }
   }
 
@@ -229,7 +239,12 @@ function App() {
               {p.liked ? '❤️' : '🤍'} {p.likes}
             </button>
             {(p.comments ?? []).map((c) => (
-              <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92 }}><b>@{c.author}</b> {c.text}</div>
+              <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
+                <span><b>@{c.author}</b> {c.text}</span>
+                {isAuth && user?.id === Number(c.userId) ? (
+                  <button type="button" onClick={() => void deleteComment(p.id, c.id)} style={{ fontSize: '0.85em', padding: '2px 6px' }}>Удалить</button>
+                ) : null}
+              </div>
             ))}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
               <div style={{ display: 'flex', gap: 6 }}>

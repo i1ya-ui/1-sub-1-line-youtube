@@ -27,3 +27,6 @@ export const patch = <T>(path: string, body: unknown, token?: string) =>
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
   })
+
+export const del = <T>(path: string, token?: string) =>
+  request<T>(path, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} })
