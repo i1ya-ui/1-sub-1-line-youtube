@@ -149,7 +149,7 @@ app.get('/api/posts', async (req: Request, res: Response) => {
       COALESCE(com.j, '[]'::json) AS comments
      FROM posts p JOIN users u ON u.id = p.user_id
      LEFT JOIN LATERAL (
-       SELECT json_agg(json_build_object('id', ci.id, 'author', u2.name, 'text', ci.body) ORDER BY ci.created_at DESC) AS j
+       SELECT json_agg(json_build_object('id', ci.id, 'author', u2.name, 'text', ci.body, 'userId', ci.user_id) ORDER BY ci.created_at DESC) AS j
        FROM (SELECT * FROM comments WHERE post_id = p.id ORDER BY created_at DESC LIMIT 12) ci
        JOIN users u2 ON u2.id = ci.user_id
      ) com ON true
@@ -201,6 +201,19 @@ app.post('/api/posts/:id/comments', auth, async (req: AuthRequest, res: Response
   const ex = await pool.query('SELECT 1 FROM posts WHERE id = $1', [id])
   if (!ex.rowCount) return res.status(404).json({ error: 'Not found' })
   await pool.query('INSERT INTO comments (post_id, user_id, body) VALUES ($1, $2, $3)', [id, req.user!.id, body])
+  res.json({ ok: true })
+})
+
+app.delete('/api/posts/:postId/comments/:id', auth, async (req: AuthRequest, res: Response) => {
+  const pid = Number(req.params.postId)
+  const cid = Number(req.params.id)
+  if (!Number.isFinite(pid) || !Number.isFinite(cid)) return res.status(400).json({ error: 'Bad id' })
+  const r = await pool.query('DELETE FROM comments WHERE id = $1 AND post_id = $2 AND user_id = $3 RETURNING 1', [
+    cid,
+    pid,
+    req.user!.id,
+  ])
+  if (!r.rowCount) return res.status(404).json({ error: 'Not found' })
   res.json({ ok: true })
 })
 
