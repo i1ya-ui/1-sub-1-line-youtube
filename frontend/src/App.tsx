@@ -241,7 +241,7 @@ function App() {
             {(p.comments ?? []).map((c) => (
               <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
                 <span><b>@{c.author}</b> {c.text}</span>
-                {isAuth && user?.id === Number(c.userId) ? (
+                {isAuth && Number(user?.id) === Number(c.userId) ? (
                   <button type="button" onClick={() => void deleteComment(p.id, c.id)} style={{ fontSize: '0.85em', padding: '2px 6px' }}>Удалить</button>
                 ) : null}
               </div>
