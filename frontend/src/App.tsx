@@ -19,8 +19,19 @@ type PostItem = {
 }
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
+const THEME_KEY = '1sub1line_theme'
+
+function readStoredTheme(): number {
+  try {
+    const n = Number(localStorage.getItem(THEME_KEY))
+    return Number.isFinite(n) && n >= 0 && n < 3 ? n : 0
+  } catch {
+    return 0
+  }
+}
+
 function App() {
-  const subs = 87
+  const subs = 91
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -94,17 +105,38 @@ function App() {
     return () => document.removeEventListener('visibilitychange', refresh)
   }, [fetchFeed])
 
-  const [theme, setTheme] = useState(0)
+  const [theme, setTheme] = useState(readStoredTheme)
+  useEffect(() => {
+    localStorage.setItem(THEME_KEY, String(theme))
+  }, [theme])
   const cycleTheme = () => setTheme((t) => (t + 1) % 3)
   const themeName = ['Тёмная', 'Светлая', 'Матрица'][theme]
+
+  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const copyPostLink = (id: number) => {
+    const url = `${window.location.origin}${window.location.pathname}#post-${id}`
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(id)
+      window.setTimeout(() => setCopiedId(null), 2000)
+    })
+  }
 
   const [posts, setPosts] = useState<PostItem[]>([
     { id: 1, text: 'Первый пост в соцсети!', likes: 0, author: 'user_1', date: '20.03' },
     { id: 2, text: 'Кто тут?', likes: 0, author: 'random_dev', date: '19.03' },
     { id: 3, text: 'Подписывайтесь!', likes: 0, author: 'user_1', date: '18.03' },
   ])
+  useEffect(() => {
+    if (postsLoading) return
+    const m = /^#post-(\d+)$/.exec(window.location.hash)
+    if (!m) return
+    const el = document.getElementById(`post-${m[1]}`)
+    if (el) window.setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
+  }, [postsLoading, posts])
   const [cText, setCText] = useState<Record<number, string>>({})
   const [cErr, setCErr] = useState<Record<number, string>>({})
+  const [delErr, setDelErr] = useState<Record<number, string>>({})
+  const [cDeleting, setCDeleting] = useState<number | null>(null)
   const [cPosting, setCPosting] = useState<number | null>(null)
   const sendComment = async (postId: number) => {
     const t = (cText[postId] || '').trim()
@@ -124,11 +156,16 @@ function App() {
 
   const deleteComment = async (postId: number, commentId: number) => {
     if (!token) return
+    if (!window.confirm('Удалить этот комментарий?')) return
+    setDelErr((m) => ({ ...m, [postId]: '' }))
+    setCDeleting(commentId)
     try {
       await del(`/posts/${postId}/comments/${commentId}`, token)
       setPosts((await get<{ posts: PostItem[] }>('/posts', token)).posts)
-    } catch {
-      /* noop */
+    } catch (e) {
+      setDelErr((m) => ({ ...m, [postId]: e instanceof Error ? e.message : 'Не удалось удалить' }))
+    } finally {
+      setCDeleting(null)
     }
   }
 
@@ -232,23 +269,30 @@ function App() {
           </button>
         </div>
         {posts.map((p) => (
-          <article key={p.id} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
+          <article key={p.id} id={`post-${p.id}`} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
             <small>{p.author} · {p.date} · 💬 {p.commentCount ?? (p.comments?.length ?? 0)}</small>
             <p style={{ margin: '6px 0' }}>{p.text}</p>
-            <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
-              {p.liked ? '❤️' : '🤍'} {p.likes}
-            </button>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
+                {p.liked ? '❤️' : '🤍'} {p.likes}
+              </button>
+              <button type="button" title="Скопировать ссылку на пост" onClick={() => copyPostLink(p.id)}>
+                {copiedId === p.id ? 'Скопировано' : 'Ссылка'}
+              </button>
+            </div>
             {(p.comments ?? []).map((c) => (
               <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
                 <span><b>@{c.author}</b> {c.text}</span>
-                {isAuth && Number(user?.id) === Number(c.userId) ? (
-                  <button type="button" onClick={() => void deleteComment(p.id, c.id)} style={{ fontSize: '0.85em', padding: '2px 6px' }}>Удалить</button>
+                {isAuth &&
+                (c.userId != null ? Number(user?.id) === Number(c.userId) : user?.name === c.author) ? (
+                  <button type="button" onClick={() => void deleteComment(p.id, c.id)} disabled={cDeleting === c.id} aria-busy={cDeleting === c.id} style={{ fontSize: '0.85em', padding: '2px 6px' }}>{cDeleting === c.id ? '…' : 'Удалить'}</button>
                 ) : null}
               </div>
             ))}
+            {delErr[p.id] ? <small style={{ color: '#ff8a8a' }}>{delErr[p.id]}</small> : null}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="Комментарий" value={cText[p.id] || ''} maxLength={MAX_COMMENT_BODY} title="Enter — отправить" readOnly={cPosting === p.id} onChange={(e) => { setCText((m) => ({ ...m, [p.id]: e.target.value })); setCErr((m) => ({ ...m, [p.id]: '' })) }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void sendComment(p.id) } }} disabled={!isAuth} style={{ flex: 1, padding: 6 }} />
+              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                <textarea placeholder="Комментарий (Ctrl+Enter — отправить)" value={cText[p.id] || ''} maxLength={MAX_COMMENT_BODY} title="Ctrl+Enter или ⌘+Enter — отправить" readOnly={cPosting === p.id} rows={2} onChange={(e) => { setCText((m) => ({ ...m, [p.id]: e.target.value })); setCErr((m) => ({ ...m, [p.id]: '' })); setDelErr((m) => ({ ...m, [p.id]: '' })) }} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void sendComment(p.id) } }} disabled={!isAuth} style={{ flex: 1, padding: 6, minHeight: 48, resize: 'vertical', boxSizing: 'border-box' }} />
                 <button type="button" onClick={() => void sendComment(p.id)} disabled={!isAuth || !(cText[p.id] || '').trim() || cPosting === p.id} aria-busy={cPosting === p.id}>{cPosting === p.id ? '...' : 'Ок'}</button>
               </div>
               <small style={{ opacity: 0.75 }}>{(cText[p.id] || '').length}/{MAX_COMMENT_BODY}</small>
