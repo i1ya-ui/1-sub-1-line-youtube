@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, patch, post } from './api/client'
 import { MAX_COMMENT_BODY, MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
@@ -31,7 +31,7 @@ function readStoredTheme(): number {
 }
 
 function App() {
-  const subs = 91
+  const subs = 92
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -112,13 +112,40 @@ function App() {
   const cycleTheme = () => setTheme((t) => (t + 1) % 3)
   const themeName = ['Тёмная', 'Светлая', 'Матрица'][theme]
 
-  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [reduceMotion, setReduceMotion] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const on = () => setReduceMotion(mq.matches)
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+
+  const [toast, setToast] = useState<string | null>(null)
+  const toastQueueRef = useRef<string[]>([])
+  const toastMs = reduceMotion ? 2000 : 2500
+  const showToast = useCallback((msg: string) => {
+    setToast((prev) => {
+      if (prev === null) return msg
+      toastQueueRef.current.push(msg)
+      return prev
+    })
+  }, [])
+  useEffect(() => {
+    if (toast !== null) {
+      const t = window.setTimeout(() => setToast(null), toastMs)
+      return () => window.clearTimeout(t)
+    }
+    const next = toastQueueRef.current.shift()
+    if (next !== undefined) setToast(next)
+  }, [toast, toastMs])
   const copyPostLink = (id: number) => {
     const url = `${window.location.origin}${window.location.pathname}#post-${id}`
-    void navigator.clipboard.writeText(url).then(() => {
-      setCopiedId(id)
-      window.setTimeout(() => setCopiedId(null), 2000)
-    })
+    void navigator.clipboard
+      .writeText(url)
+      .then(() => showToast('Ссылка скопирована'))
+      .catch(() => showToast('Не удалось скопировать'))
   }
 
   const [posts, setPosts] = useState<PostItem[]>([
@@ -131,8 +158,12 @@ function App() {
     const m = /^#post-(\d+)$/.exec(window.location.hash)
     if (!m) return
     const el = document.getElementById(`post-${m[1]}`)
-    if (el) window.setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80)
-  }, [postsLoading, posts])
+    if (el)
+      window.setTimeout(
+        () => el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest' }),
+        80,
+      )
+  }, [postsLoading, posts, reduceMotion])
   const [cText, setCText] = useState<Record<number, string>>({})
   const [cErr, setCErr] = useState<Record<number, string>>({})
   const [delErr, setDelErr] = useState<Record<number, string>>({})
@@ -228,6 +259,26 @@ function App() {
         ? '#f5f5f5'
         : 'linear-gradient(180deg,#003300 0%,#000 50%)'
   const colorStyle = theme === 2 ? '#00ff00' : theme === 1 ? '#111' : '#00f6ff'
+  const toastSurface =
+    theme === 1
+      ? {
+          background: 'rgba(255,255,255,0.96)',
+          color: '#111',
+          border: '1px solid rgba(0,0,0,0.1)',
+          boxShadow: '0 8px 28px rgba(0,0,0,0.12)',
+        }
+      : theme === 2
+        ? {
+            background: 'rgba(0,24,0,0.94)',
+            color: '#00ff00',
+            border: '1px solid rgba(0,255,0,0.35)',
+            boxShadow: '0 4px 24px rgba(0,80,0,0.45)',
+          }
+        : {
+            background: 'rgba(0,0,0,0.88)',
+            color: '#fff',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+          }
 
   return (
     <div style={{ background: bgStyle, color: colorStyle, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24, maxWidth: 420, margin: '0 auto' }}>
@@ -276,9 +327,7 @@ function App() {
               <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
                 {p.liked ? '❤️' : '🤍'} {p.likes}
               </button>
-              <button type="button" title="Скопировать ссылку на пост" onClick={() => copyPostLink(p.id)}>
-                {copiedId === p.id ? 'Скопировано' : 'Ссылка'}
-              </button>
+              <button type="button" title="Скопировать ссылку на пост" onClick={() => copyPostLink(p.id)}>Ссылка</button>
             </div>
             {(p.comments ?? []).map((c) => (
               <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
@@ -344,6 +393,26 @@ function App() {
         {postError ? <small style={{ color: '#ff8a8a' }}>{postError}</small> : null}
         <button type="button" onClick={addCommentAsPost} disabled={!isAuth || !commentDraft.trim() || commentDraft.trim().length > MAX_POST_BODY || posting} aria-busy={posting}>{posting ? '...' : 'Опубликовать'}</button>
       </div>
+      {toast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '10px 18px',
+            borderRadius: 10,
+            fontSize: '0.9rem',
+            zIndex: 50,
+            maxWidth: 'min(420px, 92vw)',
+            ...toastSurface,
+          }}
+        >
+          {toast}
+        </div>
+      ) : null}
     </div>
   )
 }
