@@ -16,6 +16,7 @@ const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173'
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const MAX_POST_BODY = 2000
 const MAX_COMMENT_BODY = 500
+const MAX_BIO = 280
 const NAME_RE = /^[a-zA-Z0-9_]{3,20}$/
 
 app.use(cors({ origin: corsOrigin }))
@@ -62,6 +63,7 @@ async function initDb() {
     'CREATE TABLE IF NOT EXISTS comments (id BIGSERIAL PRIMARY KEY, post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, body TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())',
   )
   await pool.query('CREATE INDEX IF NOT EXISTS idx_comments_post ON comments (post_id, created_at DESC)')
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT ''")
 }
 
 const auth = (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
@@ -108,9 +110,12 @@ app.post('/api/auth/login', async (req: Request, res: Response<AuthResponse | { 
   return res.json({ token: sign(user), user: { id: user.id, name: user.name } })
 })
 
-app.get('/api/auth/me', auth, (req: AuthRequest, res: Response) =>
-  res.json({ user: { id: req.user?.id, name: req.user?.name } }),
-)
+app.get('/api/auth/me', auth, async (req: AuthRequest, res: Response) => {
+  const r = await pool.query<{ id: number; name: string; bio: string }>('SELECT id, name, bio FROM users WHERE id = $1', [req.user!.id])
+  const u = r.rows[0]
+  if (!u) return res.status(401).json({ error: 'User gone' })
+  res.json({ user: { id: u.id, name: u.name, bio: u.bio } })
+})
 
 app.get('/api/health', async (_req: Request, res: Response) => {
   try {
@@ -124,9 +129,17 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 app.get('/api/users/:name', async (req: Request, res: Response) => {
   const name = (req.params.name as string | undefined)?.trim()
   if (!name) return res.status(400).json({ error: 'Bad name' })
-  const r = await pool.query<{ id: number; name: string }>('SELECT id, name FROM users WHERE name = $1', [name])
+  const r = await pool.query<{ id: number; name: string; bio: string }>('SELECT id, name, bio FROM users WHERE name = $1', [name])
   if (!r.rowCount) return res.status(404).json({ error: 'Not found' })
   return res.json({ user: r.rows[0] })
+})
+
+app.patch('/api/users/me', auth, async (req: AuthRequest, res: Response) => {
+  const bio = typeof req.body?.bio === 'string' ? req.body.bio : ''
+  if (bio.length > MAX_BIO) return res.status(400).json({ error: 'Too long' })
+  const t = bio.trim()
+  await pool.query('UPDATE users SET bio = $1 WHERE id = $2', [t, req.user!.id])
+  res.json({ ok: true, user: { id: req.user!.id, name: req.user!.name, bio: t } })
 })
 
 app.get('/api/posts', async (req: Request, res: Response) => {
