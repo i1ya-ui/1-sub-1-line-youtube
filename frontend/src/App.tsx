@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, patch, post } from './api/client'
-import { MAX_COMMENT_BODY, MAX_POST_BODY } from './constants'
+import { MAX_BIO, MAX_COMMENT_BODY, MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
 import type { Session } from './types'
 
@@ -19,6 +19,11 @@ type PostItem = {
 }
 type Profile = { id: number; name: string; avatar: string; bio: string }
 
+const PROFILE_SEED: Profile[] = [
+  { id: 1, name: 'user_1', avatar: '🦊', bio: 'Лис в сети' },
+  { id: 2, name: 'random_dev', avatar: '🐱', bio: 'Код и кофе' },
+]
+
 const THEME_KEY = '1sub1line_theme'
 
 function readStoredTheme(): number {
@@ -31,7 +36,7 @@ function readStoredTheme(): number {
 }
 
 function App() {
-  const subs = 92
+  const subs = 96
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -68,12 +73,16 @@ function App() {
     document.title = isAuth ? `1 Sub — @${user?.name}` : '1 Sub 1 Line'
   }, [isAuth, user?.name])
 
+  const [bioDraft, setBioDraft] = useState('')
+  const [bioSaving, setBioSaving] = useState(false)
   useEffect(() => {
-    if (!token) return
-    get<{ user: { id: number; name: string } }>('/auth/me', token).catch(() => {
-      setSession(null)
-      saveSession(null)
-    })
+    if (!token) return setBioDraft('')
+    get<{ user: { id: number; name: string; bio?: string } }>('/auth/me', token)
+      .then((d) => setBioDraft(d.user.bio ?? ''))
+      .catch(() => {
+        setSession(null)
+        saveSession(null)
+      })
   }, [token])
 
   const [postsLoading, setPostsLoading] = useState(true)
@@ -219,10 +228,12 @@ function App() {
     }
   }
 
-  const [profiles] = useState<Profile[]>([
-    { id: 1, name: 'user_1', avatar: '🦊', bio: 'Лис в сети' },
-    { id: 2, name: 'random_dev', avatar: '🐱', bio: 'Код и кофе' },
-  ])
+  const [profiles, setProfiles] = useState<Profile[]>(PROFILE_SEED)
+  useEffect(() => {
+    void Promise.all(PROFILE_SEED.map((p) => get<{ user: { id: number; name: string; bio: string } }>(`/users/${encodeURIComponent(p.name)}`).catch(() => null))).then((rows) =>
+      setProfiles(PROFILE_SEED.map((p, i) => { const u = rows[i]?.user; return u ? { id: u.id, name: u.name, avatar: p.avatar, bio: u.bio || p.bio } : p })),
+    )
+  }, [])
 
   const [chat, setChat] = useState<string[]>(['Привет, стрим!'])
   const sendChat = () => isAuth && setChat((c) => [...c, `@${user?.name}: сообщение #${c.length + 1}`].slice(-10))
@@ -302,6 +313,13 @@ function App() {
             {loadingAuth ? '...' : authMode === 'login' ? 'Войти' : 'Создать аккаунт'}
           </button>
           {authError && <small style={{ color: '#ff8a8a' }}>{authError}</small>}
+        </section>
+      )}
+
+      {isAuth && (
+        <section style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <textarea placeholder="О себе" value={bioDraft} maxLength={MAX_BIO} onChange={(e) => setBioDraft(e.target.value)} rows={2} style={{ padding: 6, resize: 'vertical', boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}><button type="button" onClick={() => { if (!token) return; setBioSaving(true); void patch<{ user: { bio: string } }>('/users/me', { bio: bioDraft }, token).then((r) => setBioDraft(r.user.bio)).catch(() => showToast('Не удалось сохранить био')).finally(() => setBioSaving(false)) }} disabled={bioSaving} aria-busy={bioSaving}>{bioSaving ? '...' : 'Сохранить био'}</button><small style={{ opacity: 0.75 }}>{bioDraft.length}/{MAX_BIO}</small></div>
         </section>
       )}
 
