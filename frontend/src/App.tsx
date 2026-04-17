@@ -74,16 +74,39 @@ function App() {
   }, [isAuth, user?.name])
 
   const [bioDraft, setBioDraft] = useState('')
+  const [bioSaved, setBioSaved] = useState('')
   const [bioSaving, setBioSaving] = useState(false)
   useEffect(() => {
-    if (!token) return setBioDraft('')
+    if (!token) {
+      setBioDraft('')
+      return setBioSaved('')
+    }
     get<{ user: { id: number; name: string; bio?: string } }>('/auth/me', token)
-      .then((d) => setBioDraft(d.user.bio ?? ''))
+      .then((d) => {
+        const b = d.user.bio ?? ''
+        setBioDraft(b)
+        setBioSaved(b)
+      })
       .catch(() => {
         setSession(null)
         saveSession(null)
       })
   }, [token])
+  const bioTrimmed = bioDraft.trim()
+  const bioDirty = bioTrimmed !== bioSaved
+  const saveBio = () => {
+    if (!token || !user || !bioDirty) return
+    setBioSaving(true)
+    void patch<{ user: { bio: string } }>('/users/me', { bio: bioTrimmed }, token)
+      .then((r) => {
+        setBioDraft(r.user.bio)
+        setBioSaved(r.user.bio)
+        setProfiles((prev) => prev.map((p) => (p.name === user.name ? { ...p, bio: r.user.bio } : p)))
+        showToast('Био сохранено')
+      })
+      .catch(() => showToast('Не удалось сохранить био'))
+      .finally(() => setBioSaving(false))
+  }
 
   const [postsLoading, setPostsLoading] = useState(true)
   const [postsFetchError, setPostsFetchError] = useState('')
@@ -229,11 +252,17 @@ function App() {
   }
 
   const [profiles, setProfiles] = useState<Profile[]>(PROFILE_SEED)
+  const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   useEffect(() => {
     void Promise.all(PROFILE_SEED.map((p) => get<{ user: { id: number; name: string; bio: string } }>(`/users/${encodeURIComponent(p.name)}`).catch(() => null))).then((rows) =>
       setProfiles(PROFILE_SEED.map((p, i) => { const u = rows[i]?.user; return u ? { id: u.id, name: u.name, avatar: p.avatar, bio: u.bio || p.bio } : p })),
     )
   }, [])
+  useEffect(() => {
+    if (!activeProfile) return
+    const next = profiles.find((p) => p.id === activeProfile.id || p.name === activeProfile.name) || null
+    setActiveProfile(next)
+  }, [profiles, activeProfile])
 
   const [chat, setChat] = useState<string[]>(['Привет, стрим!'])
   const sendChat = () => isAuth && setChat((c) => [...c, `@${user?.name}: сообщение #${c.length + 1}`].slice(-10))
@@ -318,8 +347,39 @@ function App() {
 
       {isAuth && (
         <section style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <textarea placeholder="О себе" value={bioDraft} maxLength={MAX_BIO} onChange={(e) => setBioDraft(e.target.value)} rows={2} style={{ padding: 6, resize: 'vertical', boxSizing: 'border-box' }} />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}><button type="button" onClick={() => { if (!token) return; setBioSaving(true); void patch<{ user: { bio: string } }>('/users/me', { bio: bioDraft }, token).then((r) => setBioDraft(r.user.bio)).catch(() => showToast('Не удалось сохранить био')).finally(() => setBioSaving(false)) }} disabled={bioSaving} aria-busy={bioSaving}>{bioSaving ? '...' : 'Сохранить био'}</button><small style={{ opacity: 0.75 }}>{bioDraft.length}/{MAX_BIO}</small></div>
+          <textarea
+            placeholder="О себе"
+            value={bioDraft}
+            maxLength={MAX_BIO}
+            title="Ctrl+Enter или ⌘+Enter — сохранить, Esc — откатить"
+            onChange={(e) => setBioDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setBioDraft(bioSaved)
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault()
+                saveBio()
+              }
+            }}
+            rows={2}
+            style={{
+              padding: 6,
+              resize: 'vertical',
+              boxSizing: 'border-box',
+              width: '100%',
+              borderRadius: 6,
+              border: bioDirty
+                ? '2px solid #f59e0b'
+                : theme === 1
+                  ? '1px solid rgba(0,0,0,0.15)'
+                  : '1px solid rgba(255,255,255,0.15)',
+            }}
+          />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <button type="button" onClick={saveBio} disabled={bioSaving || !bioDirty} aria-busy={bioSaving}>{bioSaving ? '...' : bioDirty ? 'Сохранить био' : 'Без изменений'}</button>
+            <button type="button" onClick={() => setBioDraft(bioSaved)} disabled={bioSaving || !bioDirty}>Отменить</button>
+            <small style={{ opacity: 0.75 }}>{bioDraft.length}/{MAX_BIO}</small>
+          </div>
+          {bioDirty ? <small role="status" aria-live="polite" style={{ opacity: 0.9, color: theme === 1 ? '#b45309' : '#fbbf24' }}>Есть несохранённые изменения</small> : null}
         </section>
       )}
 
@@ -377,11 +437,18 @@ function App() {
       <section style={{ width: '100%' }}>
         <h2 style={{ fontSize: '1rem', margin: '0 0 8px' }}>Профили</h2>
         {profiles.map((p) => (
-          <div key={p.id} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
+          <button type="button" key={p.id} onClick={() => setActiveProfile(p)} style={{ width: '100%', textAlign: 'left', background: activeProfile?.id === p.id ? 'rgba(245,158,11,0.2)' : 'rgba(0,0,0,0.2)', color: 'inherit', border: activeProfile?.id === p.id ? '1px solid rgba(245,158,11,0.9)' : '1px solid transparent', padding: 12, marginBottom: 8, borderRadius: 8 }}>
             <span style={{ fontSize: '1.25em' }}>{p.avatar}</span> <span>{p.name}</span>
             <p style={{ fontSize: '0.9em', opacity: 0.85, margin: '4px 0 0' }}>{p.bio}</p>
-          </div>
+          </button>
         ))}
+        {activeProfile && (
+          <article style={{ border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, padding: 12 }}>
+            <h3 style={{ margin: '0 0 6px' }}>Профиль @{activeProfile.name}</h3>
+            <p style={{ margin: '0 0 6px', opacity: 0.9 }}>ID: {activeProfile.id}</p>
+            <p style={{ margin: 0 }}>{activeProfile.bio || 'Пока без био'}</p>
+          </article>
+        )}
       </section>
 
       <section style={{ width: '100%' }}>
