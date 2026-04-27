@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { del, get, patch, post } from './api/client'
+import AuthorLink from './components/AuthorLink'
 import { MAX_BIO, MAX_COMMENT_BODY, MAX_POST_BODY } from './constants'
 import { loadSession, saveSession } from './auth/session'
+import ProfilePage from './pages/ProfilePage'
 import type { Session } from './types'
 
 type AuthMode = 'login' | 'signup'
@@ -36,7 +38,8 @@ function readStoredTheme(): number {
 }
 
 function App() {
-  const subs = 96
+  const subs = 97
+  const [path, setPath] = useState(() => window.location.pathname)
   const [session, setSession] = useState<Session | null>(() => loadSession())
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
@@ -45,6 +48,30 @@ function App() {
   const [loadingAuth, setLoadingAuth] = useState(false)
   const user = session?.user || null
   const token = session?.token || null
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+  const navigateToProfile = useCallback((name: string) => {
+    const next = `/profile/${encodeURIComponent(name)}`
+    if (window.location.pathname !== next) window.history.pushState(null, '', next)
+    setPath(next)
+  }, [])
+  const navigateHome = useCallback(() => {
+    if (window.location.pathname !== '/') window.history.pushState(null, '', '/')
+    setPath('/')
+  }, [])
+  const profileRoute = /^\/profile\/([^/]+)$/.exec(path)
+  if (profileRoute) {
+    let name = profileRoute[1]
+    try {
+      name = decodeURIComponent(name)
+    } catch {
+      name = profileRoute[1]
+    }
+    return <ProfilePage name={name} onBack={navigateHome} token={token} />
+  }
 
   const authSubmit = async () => {
     setAuthError('')
@@ -253,6 +280,17 @@ function App() {
 
   const [profiles, setProfiles] = useState<Profile[]>(PROFILE_SEED)
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
+  const openProfile = useCallback((name: string) => {
+    const p = profiles.find((x) => x.name === name)
+    if (p) setActiveProfile(p)
+  }, [profiles])
+  const copyProfileLink = useCallback((name: string) => {
+    const url = `${window.location.origin}${window.location.pathname}#profile-${encodeURIComponent(name)}`
+    void navigator.clipboard
+      .writeText(url)
+      .then(() => showToast('Ссылка на профиль скопирована'))
+      .catch(() => showToast('Не удалось скопировать профиль'))
+  }, [showToast])
   useEffect(() => {
     void Promise.all(PROFILE_SEED.map((p) => get<{ user: { id: number; name: string; bio: string } }>(`/users/${encodeURIComponent(p.name)}`).catch(() => null))).then((rows) =>
       setProfiles(PROFILE_SEED.map((p, i) => { const u = rows[i]?.user; return u ? { id: u.id, name: u.name, avatar: p.avatar, bio: u.bio || p.bio } : p })),
@@ -263,6 +301,37 @@ function App() {
     const next = profiles.find((p) => p.id === activeProfile.id || p.name === activeProfile.name) || null
     setActiveProfile(next)
   }, [profiles, activeProfile])
+  useEffect(() => {
+    const m = /^#profile-(.+)$/.exec(window.location.hash)
+    if (!m) return
+    let name = m[1]
+    try {
+      name = decodeURIComponent(name)
+    } catch {
+      return
+    }
+    const p = profiles.find((x) => x.name === name)
+    if (p) setActiveProfile((prev) => (prev?.name === p.name ? prev : p))
+  }, [profiles])
+  useEffect(() => {
+    const onHash = () => {
+      const m = /^#profile-(.+)$/.exec(window.location.hash)
+      if (!m) return
+      try {
+        openProfile(decodeURIComponent(m[1]))
+      } catch {
+        // ignore malformed URI hash
+      }
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [openProfile])
+  useEffect(() => {
+    if (!activeProfile) return
+    const next = `#profile-${encodeURIComponent(activeProfile.name)}`
+    if (window.location.hash === next) return
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${next}`)
+  }, [activeProfile])
 
   const [chat, setChat] = useState<string[]>(['Привет, стрим!'])
   const sendChat = () => isAuth && setChat((c) => [...c, `@${user?.name}: сообщение #${c.length + 1}`].slice(-10))
@@ -399,7 +468,7 @@ function App() {
         </div>
         {posts.map((p) => (
           <article key={p.id} id={`post-${p.id}`} style={{ background: 'rgba(0,0,0,0.2)', padding: 12, marginBottom: 8, borderRadius: 8 }}>
-            <small>{p.author} · {p.date} · 💬 {p.commentCount ?? (p.comments?.length ?? 0)}</small>
+            <small><AuthorLink name={p.author} onOpen={navigateToProfile} /> · {p.date} · 💬 {p.commentCount ?? (p.comments?.length ?? 0)}</small>
             <p style={{ margin: '6px 0' }}>{p.text}</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               <button type="button" onClick={() => likePost(p.id, Boolean(p.liked))} disabled={isAuth && Boolean(p.liked)}>
@@ -409,7 +478,7 @@ function App() {
             </div>
             {(p.comments ?? []).map((c) => (
               <div key={c.id} style={{ fontSize: '0.85em', marginTop: 4, opacity: 0.92, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
-                <span><b>@{c.author}</b> {c.text}</span>
+                <span><b><AuthorLink name={c.author} withAt onOpen={navigateToProfile} /></b> {c.text}</span>
                 {isAuth &&
                 (c.userId != null ? Number(user?.id) === Number(c.userId) : user?.name === c.author) ? (
                   <button type="button" onClick={() => void deleteComment(p.id, c.id)} disabled={cDeleting === c.id} aria-busy={cDeleting === c.id} style={{ fontSize: '0.85em', padding: '2px 6px' }}>{cDeleting === c.id ? '…' : 'Удалить'}</button>
@@ -447,6 +516,11 @@ function App() {
             <h3 style={{ margin: '0 0 6px' }}>Профиль @{activeProfile.name}</h3>
             <p style={{ margin: '0 0 6px', opacity: 0.9 }}>ID: {activeProfile.id}</p>
             <p style={{ margin: 0 }}>{activeProfile.bio || 'Пока без био'}</p>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button type="button" onClick={() => navigateToProfile(activeProfile.name)}>Открыть страницу</button>
+              <button type="button" onClick={() => copyProfileLink(activeProfile.name)}>Скопировать ссылку</button>
+              <button type="button" onClick={() => setActiveProfile(null)}>Закрыть</button>
+            </div>
           </article>
         )}
       </section>
