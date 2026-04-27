@@ -62,16 +62,6 @@ function App() {
     if (window.location.pathname !== '/') window.history.pushState(null, '', '/')
     setPath('/')
   }, [])
-  const profileRoute = /^\/profile\/([^/]+)$/.exec(path)
-  if (profileRoute) {
-    let name = profileRoute[1]
-    try {
-      name = decodeURIComponent(name)
-    } catch {
-      name = profileRoute[1]
-    }
-    return <ProfilePage name={name} onBack={navigateHome} token={token} />
-  }
 
   const authSubmit = async () => {
     setAuthError('')
@@ -388,6 +378,17 @@ function App() {
             color: '#fff',
             boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
           }
+
+  const profileRoute = /^\/profile\/([^/]+)$/.exec(path)
+  if (profileRoute) {
+    let profileName = profileRoute[1]
+    try {
+      profileName = decodeURIComponent(profileName)
+    } catch {
+      profileName = profileRoute[1]
+    }
+    return <ProfilePage name={profileName} onBack={navigateHome} token={token} />
+  }
 
   return (
     <div style={{ background: bgStyle, color: colorStyle, minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 24, maxWidth: 420, margin: '0 auto' }}>
