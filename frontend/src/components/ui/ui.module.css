@@ -1,0 +1,156 @@
+.pageContainer {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionHeader {
+  margin: 0;
+  font-size: var(--font-md);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-soft);
+}
+
+.cardMuted {
+  background: var(--surface-muted);
+}
+
+.button {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: var(--font-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: 0.15s ease;
+  transition-property: background-color, border-color, transform, color;
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.buttonPrimary {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.buttonSecondary {
+  background: var(--surface-muted);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.buttonSecondary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.buttonGhost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.buttonGhost:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.buttonDanger {
+  background: transparent;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
+.buttonDanger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.buttonLink {
+  background: transparent;
+  color: var(--accent);
+  border-color: transparent;
+  padding: 0;
+}
+
+.buttonLink:hover:not(:disabled) {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.buttonSm {
+  padding: 7px 10px;
+  font-size: var(--font-xs);
+}
+
+.buttonMd {
+  padding: 10px 14px;
+  font-size: var(--font-sm);
+}
+
+.field {
+  width: 100%;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: var(--font-sm);
+}
+
+.field:focus-visible {
+  outline: 2px solid var(--accent);
+  border-color: transparent;
+}
+
+.textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--success) 24%, transparent);
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--success) 45%, var(--border));
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+.modalCard {
+  width: min(540px, 100%);
+}

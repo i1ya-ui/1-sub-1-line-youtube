@@ -1,24 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { get } from '../api/client'
+import { Button, Card, PageContainer, Section } from '../components/ui'
+import { loadSession } from '../auth/session'
+import type { PostItem, Profile } from '../types'
+import styles from './ProfilePage.module.css'
 
-type Profile = { id: number; name: string; bio: string }
-type PostComment = { id: number; author: string; text: string }
-type PostItem = {
-  id: number
-  text: string
-  author: string
-  date: string
-  likes: number
-  comments?: PostComment[]
-}
-
-type Props = {
-  name: string
-  onBack: () => void
-  token?: string | null
-}
-
-function ProfilePage({ name, onBack, token }: Props) {
+function ProfilePage() {
+  const params = useParams()
+  const navigate = useNavigate()
+  const name = decodeURIComponent(params.name || '')
+  const token = loadSession()?.token ?? null
   const [profile, setProfile] = useState<Profile | null>(null)
   const [posts, setPosts] = useState<PostItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -46,32 +38,37 @@ function ProfilePage({ name, onBack, token }: Props) {
   )
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 12, padding: 24, maxWidth: 560, margin: '0 auto' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <h1 style={{ margin: 0, fontSize: '1.3rem' }}>Профиль @{name}</h1>
-        <button type="button" onClick={onBack}>Назад</button>
-      </header>
-      {loading ? <p style={{ margin: 0 }}>Загрузка профиля…</p> : null}
-      {error ? <p role="alert" style={{ margin: 0, color: '#ff8a8a' }}>{error}</p> : null}
+    <PageContainer>
+      <Card>
+        <header className={styles.headerRow}>
+          <h1 className={styles.title}>Профиль @{name}</h1>
+          <Button type="button" variant="ghost" onClick={() => navigate('/')}>
+            Назад
+          </Button>
+        </header>
+      </Card>
+      {loading ? <p className={styles.meta}>Загрузка профиля…</p> : null}
+      {error ? <p role="alert" className={styles.error}>{error}</p> : null}
       {profile ? (
-        <section style={{ border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, padding: 12 }}>
-          <p style={{ margin: '0 0 6px' }}>ID: {profile.id}</p>
-          <p style={{ margin: '0 0 6px' }}>Постов в ленте: {authored.length}</p>
-          <p style={{ margin: '0 0 6px' }}>Комментариев в ленте: {commentsCount}</p>
-          <p style={{ margin: 0 }}>{profile.bio || 'Пока без био'}</p>
-        </section>
+        <Card>
+          <p className={styles.meta}>ID: {profile.id}</p>
+          <p className={styles.meta}>Постов в ленте: {authored.length}</p>
+          <p className={styles.meta}>Комментариев в ленте: {commentsCount}</p>
+          <p>{profile.bio || 'Пока без био'}</p>
+        </Card>
       ) : null}
-      <section>
-        <h2 style={{ fontSize: '1rem', margin: '0 0 8px' }}>Посты автора</h2>
-        {authored.length === 0 ? <p style={{ margin: 0, opacity: 0.8 }}>Пока нет постов в текущей ленте.</p> : null}
+      <Section title="Посты автора">
+        {authored.length === 0 ? <p className={styles.meta}>Пока нет постов в текущей ленте.</p> : null}
         {authored.map((p) => (
-          <article key={p.id} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: 10, marginBottom: 8 }}>
-            <small>{p.date} · ❤️ {p.likes}</small>
-            <p style={{ margin: '6px 0 0' }}>{p.text}</p>
-          </article>
+          <Card key={p.id} muted>
+            <small className={styles.meta}>
+              {p.date} · ❤️ {p.likes}
+            </small>
+            <p className={styles.postText}>{p.text}</p>
+          </Card>
         ))}
-      </section>
-    </div>
+      </Section>
+    </PageContainer>
   )
 }
 

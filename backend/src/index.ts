@@ -126,6 +126,28 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   }
 })
 
+app.get('/api/users', async (req: Request, res: Response) => {
+  const limitRaw = Number(req.query.limit)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 30
+  const r = await pool.query<{ id: number; name: string; bio: string; posts_count: number }>(
+    `SELECT u.id, u.name, u.bio, COUNT(p.id)::int AS posts_count
+     FROM users u
+     LEFT JOIN posts p ON p.user_id = u.id
+     GROUP BY u.id, u.name, u.bio
+     ORDER BY u.created_at DESC
+     LIMIT $1`,
+    [limit],
+  )
+  return res.json({
+    users: r.rows.map((u) => ({
+      id: Number(u.id),
+      name: u.name,
+      bio: u.bio ?? '',
+      postsCount: Number(u.posts_count) || 0,
+    })),
+  })
+})
+
 app.get('/api/users/:name', async (req: Request, res: Response) => {
   const name = (req.params.name as string | undefined)?.trim()
   if (!name) return res.status(400).json({ error: 'Bad name' })
