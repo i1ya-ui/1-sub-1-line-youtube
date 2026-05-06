@@ -23,7 +23,8 @@ const sizeClass: Record<Size, string> = {
 }
 
 function Button({ variant = 'secondary', size = 'md', className = '', ...props }: Props) {
-  return <button className={`${styles.button} ${variantClass[variant]} ${sizeClass[size]} ${className}`.trim()} {...props} />
+  const sizeCls = variant === 'link' ? '' : sizeClass[size]
+  return <button className={`${styles.button} ${variantClass[variant]} ${sizeCls} ${className}`.trim()} {...props} />
 }
 
 export default Button

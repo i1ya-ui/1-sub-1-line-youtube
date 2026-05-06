@@ -95,6 +95,9 @@
   color: var(--accent);
   border-color: transparent;
   padding: 0;
+  line-height: 1.35;
+  font-weight: 600;
+  font-size: inherit;
 }
 
 .buttonLink:hover:not(:disabled) {

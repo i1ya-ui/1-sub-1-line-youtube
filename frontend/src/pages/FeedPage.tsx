@@ -1,9 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { del, get, patch, post } from '../api/client'
 import { loadSession, saveSession } from '../auth/session'
 import AuthorLink from '../components/AuthorLink'
+import postCard from '../components/PostCardLayout.module.css'
 import { Badge, Button, Card, Input, Modal, Section, Textarea } from '../components/ui'
 import { MAX_BIO, MAX_COMMENT_BODY, MAX_POST_BODY } from '../constants'
+import { formatCommentTime } from '../shared/formatCommentTime'
 import type { PostItem, Profile, Session } from '../types'
 import styles from './FeedPage.module.css'
 
@@ -311,60 +313,112 @@ function FeedPage() {
           </div>
           {postsLoading ? <p className={styles.muted}>Загрузка ленты…</p> : null}
           {postsFetchError ? <p className={styles.error}>{postsFetchError}</p> : null}
-          {feedPosts.map((p) => (
-            <Fragment key={p.id}>
-              <Card muted>
-                <small>
-                  <AuthorLink name={p.author} /> · {p.date} · 💬 {p.commentCount ?? p.comments?.length ?? 0}
-                </small>
-                <p className={styles.postText}>{p.text}</p>
-                <div className={styles.row}>
-                  <Button type="button" onClick={() => void likePost(p.id, Boolean(p.liked))} disabled={!isAuth || Boolean(p.liked)} size="sm">
-                    {p.liked ? '❤️' : '🤍'} {p.likes}
-                  </Button>
-                </div>
-                {(p.comments ?? []).map((c) => (
-                  <div className={styles.comment} key={c.id}>
-                    <small>
-                      <AuthorLink name={c.author} withAt />
-                    </small>{' '}
-                    {c.text}
-                    {isAuth && (c.userId != null ? Number(user?.id) === Number(c.userId) : user?.name === c.author) ? (
-                      <div className={styles.row}>
-                        <Button type="button" variant="danger" size="sm" onClick={() => void deleteComment(p.id, c.id)} disabled={cDeleting === c.id}>
-                          {cDeleting === c.id ? '...' : 'Удалить'}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-                {delErr[p.id] ? <p className={styles.error}>{delErr[p.id]}</p> : null}
-                {isAuth ? (
-                  <>
-                    <Textarea
-                      placeholder="Комментарий"
-                      value={cText[p.id] || ''}
-                      maxLength={MAX_COMMENT_BODY}
-                      rows={2}
-                      onChange={(e) => {
-                        setCText((m) => ({ ...m, [p.id]: e.target.value }))
-                        setCErr((m) => ({ ...m, [p.id]: '' }))
-                      }}
-                    />
-                    <div className={styles.inlineActions}>
-                      <Button type="button" onClick={() => void sendComment(p.id)} disabled={!(cText[p.id] || '').trim() || cPosting === p.id}>
-                        {cPosting === p.id ? '...' : 'Отправить'}
-                      </Button>
-                      <small className={styles.muted}>
-                        {(cText[p.id] || '').length}/{MAX_COMMENT_BODY}
-                      </small>
+          <div className={styles.postFeed}>
+            {feedPosts.map((p) => {
+              const commentCount = p.commentCount ?? p.comments?.length ?? 0
+              return (
+                <article key={p.id} className={postCard.article}>
+                  <header className={postCard.header}>
+                    <div className={postCard.author}>
+                      <AuthorLink name={p.author} />
                     </div>
-                    {cErr[p.id] ? <p className={styles.error}>{cErr[p.id]}</p> : null}
-                  </>
-                ) : null}
-              </Card>
-            </Fragment>
-          ))}
+                    <div className={postCard.meta}>
+                      <time dateTime={p.date}>{p.date}</time>
+                      <span className={postCard.chip} title="Комментарии">
+                        💬 {commentCount}
+                      </span>
+                    </div>
+                  </header>
+                  <p className={postCard.body}>{p.text}</p>
+                  <div className={postCard.actions}>
+                    <Button type="button" onClick={() => void likePost(p.id, Boolean(p.liked))} disabled={!isAuth || Boolean(p.liked)} size="sm">
+                      {p.liked ? '❤️' : '🤍'} {p.likes}
+                    </Button>
+                  </div>
+                  {(p.comments ?? []).length > 0 ? (
+                    <section className={styles.commentsBlock} aria-label="Комментарии к посту">
+                      <h3 className={styles.commentsHeading}>
+                        Комментарии
+                        <span className={styles.commentsCount}>{commentCount}</span>
+                      </h3>
+                      <ul className={styles.commentList}>
+                        {(p.comments ?? []).map((c) => {
+                          const initial = (c.author?.trim().charAt(0) || '?').toUpperCase()
+                          const canDelete =
+                            isAuth && (c.userId != null ? Number(user?.id) === Number(c.userId) : user?.name === c.author)
+                          const timeLabel = formatCommentTime(c.createdAt)
+                          return (
+                            <li className={styles.commentItem} key={c.id}>
+                              <div className={styles.commentAvatar} aria-hidden>
+                                {initial}
+                              </div>
+                              <div className={styles.commentContent}>
+                                <div className={styles.commentHead}>
+                                  <div className={styles.commentAuthorLine}>
+                                    <AuthorLink name={c.author} withAt />
+                                    {timeLabel ? (
+                                      <time className={styles.commentTime} dateTime={c.createdAt}>
+                                        {timeLabel}
+                                      </time>
+                                    ) : null}
+                                  </div>
+                                  {canDelete ? (
+                                    <Button
+                                      type="button"
+                                      className={styles.commentDelete}
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => void deleteComment(p.id, c.id)}
+                                      disabled={cDeleting === c.id}
+                                    >
+                                      {cDeleting === c.id ? '...' : 'Удалить'}
+                                    </Button>
+                                  ) : null}
+                                </div>
+                                <p className={styles.commentText}>{c.text}</p>
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </section>
+                  ) : null}
+                  {delErr[p.id] ? <p className={styles.error}>{delErr[p.id]}</p> : null}
+                  {isAuth ? (
+                    <div className={styles.commentComposer}>
+                      <p className={styles.commentComposerLabel}>Ваш комментарий</p>
+                      <Textarea
+                        placeholder="Написать комментарий…"
+                        value={cText[p.id] || ''}
+                        maxLength={MAX_COMMENT_BODY}
+                        rows={2}
+                        readOnly={cPosting === p.id}
+                        onChange={(e) => {
+                          setCText((m) => ({ ...m, [p.id]: e.target.value }))
+                          setCErr((m) => ({ ...m, [p.id]: '' }))
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                            e.preventDefault()
+                            void sendComment(p.id)
+                          }
+                        }}
+                      />
+                      <div className={styles.inlineActions}>
+                        <Button type="button" onClick={() => void sendComment(p.id)} disabled={!(cText[p.id] || '').trim() || cPosting === p.id}>
+                          {cPosting === p.id ? '...' : 'Отправить'}
+                        </Button>
+                        <small className={styles.muted}>
+                          {(cText[p.id] || '').length}/{MAX_COMMENT_BODY}
+                        </small>
+                      </div>
+                      {cErr[p.id] ? <p className={styles.error}>{cErr[p.id]}</p> : null}
+                    </div>
+                  ) : null}
+                </article>
+              )
+            })}
+          </div>
         </Section>
       </Card>
 
