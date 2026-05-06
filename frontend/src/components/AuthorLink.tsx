@@ -1,26 +1,27 @@
+import { useNavigate } from 'react-router-dom'
+import { Button } from './ui'
+
 type Props = {
   name: string
   withAt?: boolean
-  onOpen: (name: string) => void
+  onOpen?: (name: string) => void
 }
 
 function AuthorLink({ name, withAt, onOpen }: Props) {
+  const navigate = useNavigate()
   return (
-    <button
+    <Button
       type="button"
-      onClick={() => onOpen(name)}
-      style={{
-        background: 'transparent',
-        border: 'none',
-        color: 'inherit',
-        padding: 0,
-        cursor: 'pointer',
-        textDecoration: 'underline',
+      variant="link"
+      size="sm"
+      onClick={() => {
+        if (onOpen) onOpen(name)
+        else navigate(`/profile/${encodeURIComponent(name)}`)
       }}
     >
       {withAt ? '@' : ''}
       {name}
-    </button>
+    </Button>
   )
 }
 
