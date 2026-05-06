@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { get } from '../api/client'
+import postCard from '../components/PostCardLayout.module.css'
 import { Button, Card, PageContainer, Section } from '../components/ui'
 import { loadSession } from '../auth/session'
 import type { PostItem, Profile } from '../types'
@@ -59,14 +60,19 @@ function ProfilePage() {
       ) : null}
       <Section title="Посты автора">
         {authored.length === 0 ? <p className={styles.meta}>Пока нет постов в текущей ленте.</p> : null}
-        {authored.map((p) => (
-          <Card key={p.id} muted>
-            <small className={styles.meta}>
-              {p.date} · ❤️ {p.likes}
-            </small>
-            <p className={styles.postText}>{p.text}</p>
-          </Card>
-        ))}
+        <div className={styles.postFeed}>
+          {authored.map((p) => (
+            <article key={p.id} className={postCard.article}>
+              <header className={postCard.header}>
+                <div className={postCard.meta}>
+                  <time dateTime={p.date}>{p.date}</time>
+                  <span className={postCard.chip}>❤️ {p.likes}</span>
+                </div>
+              </header>
+              <p className={postCard.body}>{p.text}</p>
+            </article>
+          ))}
+        </div>
       </Section>
     </PageContainer>
   )

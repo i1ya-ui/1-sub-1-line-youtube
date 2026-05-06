@@ -184,7 +184,16 @@ app.get('/api/posts', async (req: Request, res: Response) => {
       COALESCE(com.j, '[]'::json) AS comments
      FROM posts p JOIN users u ON u.id = p.user_id
      LEFT JOIN LATERAL (
-       SELECT json_agg(json_build_object('id', ci.id, 'author', u2.name, 'text', ci.body, 'userId', ci.user_id) ORDER BY ci.created_at DESC) AS j
+       SELECT json_agg(
+         json_build_object(
+           'id', ci.id,
+           'author', u2.name,
+           'text', ci.body,
+           'userId', ci.user_id,
+           'createdAt', ci.created_at
+         )
+         ORDER BY ci.created_at ASC
+       ) AS j
        FROM (SELECT * FROM comments WHERE post_id = p.id ORDER BY created_at DESC LIMIT 12) ci
        JOIN users u2 ON u2.id = ci.user_id
      ) com ON true

@@ -1,7 +1,7 @@
 export type User = { id: number; name: string }
 export type Session = { token: string; user: User }
 export type ApiError = { error?: string }
-export type PostComment = { id: number; author: string; text: string; userId?: number }
+export type PostComment = { id: number; author: string; text: string; userId?: number; createdAt?: string }
 export type PostItem = {
   id: number
   text: string
