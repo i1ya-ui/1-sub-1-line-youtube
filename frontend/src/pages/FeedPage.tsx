@@ -7,6 +7,7 @@ import { Badge, Button, Card, Input, Modal, Section, Textarea } from '../compone
 import { MAX_BIO, MAX_COMMENT_BODY, MAX_POST_BODY } from '../constants'
 import { formatCommentTime } from '../shared/formatCommentTime'
 import type { PostItem, Profile, Session } from '../types'
+import uiStyles from '../components/ui/ui.module.css'
 import styles from './FeedPage.module.css'
 
 type AuthMode = 'login' | 'signup'
@@ -49,6 +50,11 @@ function FeedPage() {
   const [profilesError, setProfilesError] = useState('')
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [newPostOpen, setNewPostOpen] = useState(false)
+
+  const [filterAuthor, setFilterAuthor] = useState('')
+  const [filterFrom, setFilterFrom] = useState('')
+  const [filterTo, setFilterTo] = useState('')
+  const [onlyMine, setOnlyMine] = useState(false)
 
   const [toast, setToast] = useState<string | null>(null)
   const toastQueueRef = useRef<string[]>([])
@@ -116,15 +122,35 @@ function FeedPage() {
   const fetchFeed = useCallback(() => {
     setPostsLoading(true)
     setPostsFetchError('')
-    get<{ posts: PostItem[] }>('/posts', token ?? undefined)
+    const params = new URLSearchParams()
+    if (filterAuthor.trim()) params.set('author', filterAuthor.trim())
+    if (filterFrom.trim()) params.set('from', filterFrom.trim())
+    if (filterTo.trim()) params.set('to', filterTo.trim())
+    if (onlyMine) params.set('mine', '1')
+    const qs = params.toString()
+    const path = qs ? `/posts?${qs}` : '/posts'
+    get<{ posts: PostItem[] }>(path, token ?? undefined)
       .then((d) => setPosts(d.posts))
-      .catch(() => setPostsFetchError('Не удалось загрузить ленту'))
+      .catch((e) => setPostsFetchError(e instanceof Error ? e.message : 'Не удалось загрузить ленту'))
       .finally(() => setPostsLoading(false))
-  }, [token])
+  }, [token, filterAuthor, filterFrom, filterTo, onlyMine])
 
   useEffect(() => {
     fetchFeed()
   }, [fetchFeed])
+
+  useEffect(() => {
+    if (!isAuth) setOnlyMine(false)
+  }, [isAuth])
+
+  const filtersActive = Boolean(filterAuthor.trim() || filterFrom.trim() || filterTo.trim() || onlyMine)
+
+  const clearFilters = () => {
+    setFilterAuthor('')
+    setFilterFrom('')
+    setFilterTo('')
+    setOnlyMine(false)
+  }
 
   useEffect(() => {
     setProfilesLoading(true)
@@ -242,6 +268,12 @@ function FeedPage() {
 
   const feedPosts = useMemo(() => posts, [posts])
 
+  const authorOptions = useMemo(() => {
+    const names = new Set(profiles.map((p) => p.name))
+    for (const p of posts) names.add(p.author)
+    return Array.from(names).sort((a, b) => a.localeCompare(b))
+  }, [profiles, posts])
+
   return (
     <div className={styles.grid}>
       <div className={styles.topBar}>
@@ -311,8 +343,48 @@ function FeedPage() {
               Обновить
             </Button>
           </div>
+          <div className={styles.feedFilters}>
+            <div className={styles.filterRow}>
+              <div className={styles.filterField}>
+                <p className={styles.filterFieldLabel}>Автор</p>
+                <select
+                  className={`${uiStyles.field} ${styles.filterSelect}`}
+                  value={filterAuthor}
+                  onChange={(e) => setFilterAuthor(e.target.value)}
+                  aria-label="Фильтр по автору"
+                >
+                  <option value="">Все авторы</option>
+                  {authorOptions.map((name) => (
+                    <option key={name} value={name}>
+                      @{name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className={styles.filterField}>
+                <p className={styles.filterFieldLabel}>С даты</p>
+                <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} aria-label="С даты" />
+              </div>
+              <div className={styles.filterField}>
+                <p className={styles.filterFieldLabel}>По дату</p>
+                <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} aria-label="По дату" />
+              </div>
+            </div>
+            <div className={styles.filterRow}>
+              <label className={styles.filterCheckbox}>
+                <input type="checkbox" checked={onlyMine} disabled={!isAuth} onChange={(e) => setOnlyMine(e.target.checked)} />
+                Только мои посты
+              </label>
+              <Button type="button" variant="secondary" onClick={clearFilters} disabled={!filtersActive}>
+                Сбросить
+              </Button>
+            </div>
+          </div>
           {postsLoading ? <p className={styles.muted}>Загрузка ленты…</p> : null}
           {postsFetchError ? <p className={styles.error}>{postsFetchError}</p> : null}
+          {!postsLoading && !postsFetchError && feedPosts.length === 0 ? (
+            <p className={styles.muted}>{filtersActive ? 'Нет постов по этим фильтрам.' : 'Пока нет постов.'}</p>
+          ) : null}
           <div className={styles.postFeed}>
             {feedPosts.map((p) => {
               const commentCount = p.commentCount ?? p.comments?.length ?? 0
@@ -474,6 +546,16 @@ function FeedPage() {
             <p className={styles.muted}>Постов: {activeProfile.postsCount ?? 0}</p>
             <p>{activeProfile.bio || 'Пока без био'}</p>
             <div className={styles.inlineActions}>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  setFilterAuthor(activeProfile.name)
+                  setActiveProfile(null)
+                }}
+              >
+                Посты @{activeProfile.name}
+              </Button>
               <Badge>Быстрый просмотр</Badge>
               <Button type="button" variant="ghost" onClick={() => setActiveProfile(null)}>
                 Закрыть

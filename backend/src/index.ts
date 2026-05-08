@@ -55,6 +55,7 @@ async function initDb() {
   await pool.query('CREATE TABLE IF NOT EXISTS posts (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),body TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())')
   await pool.query('ALTER TABLE posts ADD COLUMN IF NOT EXISTS likes INT NOT NULL DEFAULT 0')
   await pool.query('CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts (created_at DESC)')
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts (user_id)')
   await pool.query(
     'CREATE TABLE IF NOT EXISTS post_likes (user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE, post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE, PRIMARY KEY (user_id, post_id))',
   )
@@ -175,6 +176,51 @@ app.get('/api/posts', async (req: Request, res: Response) => {
       uid = null
     }
   }
+  const mineRaw = req.query.mine
+  const mine = mineRaw === '1' || mineRaw === 'true'
+  if (mine && uid == null) return res.status(401).json({ error: 'Auth required' })
+
+  const authorRaw = typeof req.query.author === 'string' ? req.query.author.trim() : ''
+  const author = authorRaw || null
+  if (author && !NAME_RE.test(author)) return res.status(400).json({ error: 'Bad author' })
+
+  const fromRaw = typeof req.query.from === 'string' ? req.query.from.trim() : ''
+  const toRaw = typeof req.query.to === 'string' ? req.query.to.trim() : ''
+  let fromTs: Date | null = null
+  let toTs: Date | null = null
+  if (fromRaw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromRaw)) return res.status(400).json({ error: 'Bad from date' })
+    fromTs = new Date(`${fromRaw}T00:00:00.000Z`)
+    if (Number.isNaN(fromTs.getTime())) return res.status(400).json({ error: 'Bad from date' })
+  }
+  if (toRaw) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(toRaw)) return res.status(400).json({ error: 'Bad to date' })
+    toTs = new Date(`${toRaw}T23:59:59.999Z`)
+    if (Number.isNaN(toTs.getTime())) return res.status(400).json({ error: 'Bad to date' })
+  }
+  if (fromTs && toTs && fromTs.getTime() > toTs.getTime()) return res.status(400).json({ error: 'from after to' })
+
+  const qparams: unknown[] = [uid]
+  const whereParts: string[] = []
+  let qi = 2
+  if (author) {
+    whereParts.push(`u.name = $${qi++}`)
+    qparams.push(author)
+  }
+  if (fromTs) {
+    whereParts.push(`p.created_at >= $${qi++}`)
+    qparams.push(fromTs)
+  }
+  if (toTs) {
+    whereParts.push(`p.created_at <= $${qi++}`)
+    qparams.push(toTs)
+  }
+  if (mine) {
+    whereParts.push(`p.user_id = $${qi++}`)
+    qparams.push(uid)
+  }
+  const whereSql = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : ''
+
   const r = await pool.query(
     `SELECT p.id, p.body, u.name, p.created_at, p.likes,
       (SELECT COUNT(*)::int FROM comments c WHERE c.post_id = p.id) AS comment_count,
@@ -197,8 +243,9 @@ app.get('/api/posts', async (req: Request, res: Response) => {
        FROM (SELECT * FROM comments WHERE post_id = p.id ORDER BY created_at DESC LIMIT 12) ci
        JOIN users u2 ON u2.id = ci.user_id
      ) com ON true
+     ${whereSql}
      ORDER BY p.created_at DESC LIMIT 50`,
-    [uid],
+    qparams,
   )
   res.json({
     posts: r.rows.map((x) => ({
