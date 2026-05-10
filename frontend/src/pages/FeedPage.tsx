@@ -15,6 +15,8 @@ type AuthResponse = Session
 
 const TOAST_MS = 2200
 
+type MeResponse = { user: { bio?: string; profilePoints?: number } }
+
 function FeedPage() {
   const subs = 97
   const [session, setSession] = useState<Session | null>(() => loadSession())
@@ -97,6 +99,28 @@ function FeedPage() {
     saveSession(null)
   }
 
+  const syncMe = useCallback(async () => {
+    if (!token) return
+    try {
+      const d = await get<MeResponse>('/auth/me', token)
+      const b = d.user.bio ?? ''
+      setBioDraft(b)
+      setBioSaved(b)
+      setSession((prev) => {
+        if (!prev) return null
+        const next: Session = {
+          ...prev,
+          user: { ...prev.user, profilePoints: Number(d.user.profilePoints) || 0 },
+        }
+        saveSession(next)
+        return next
+      })
+    } catch {
+      setSession(null)
+      saveSession(null)
+    }
+  }, [token])
+
   useEffect(() => {
     document.title = isAuth ? `1 Sub — @${user?.name}` : '1 Sub 1 Line'
   }, [isAuth, user?.name])
@@ -107,17 +131,8 @@ function FeedPage() {
       setBioSaved('')
       return
     }
-    get<{ user: { bio?: string } }>('/auth/me', token)
-      .then((d) => {
-        const b = d.user.bio ?? ''
-        setBioDraft(b)
-        setBioSaved(b)
-      })
-      .catch(() => {
-        setSession(null)
-        saveSession(null)
-      })
-  }, [token])
+    void syncMe()
+  }, [token, syncMe])
 
   const fetchFeed = useCallback(() => {
     setPostsLoading(true)
@@ -155,7 +170,7 @@ function FeedPage() {
   useEffect(() => {
     setProfilesLoading(true)
     setProfilesError('')
-    get<{ users: Array<{ id: number; name: string; bio: string; postsCount?: number }> }>('/users')
+    get<{ users: Array<{ id: number; name: string; bio: string; postsCount?: number; profilePoints?: number }> }>('/users')
       .then((d) => {
         setProfiles(
           d.users.map((u) => ({
@@ -163,6 +178,7 @@ function FeedPage() {
             name: u.name,
             bio: u.bio || 'Пока без био',
             postsCount: u.postsCount ?? 0,
+            profilePoints: u.profilePoints ?? 0,
           })),
         )
       })
@@ -174,6 +190,7 @@ function FeedPage() {
             id: idx + 1,
             name: author,
             bio: 'Био недоступно',
+            profilePoints: 0,
           })),
         )
       })
@@ -186,11 +203,20 @@ function FeedPage() {
   const saveBio = () => {
     if (!token || !user || !bioDirty) return
     setBioSaving(true)
-    void patch<{ user: { bio: string } }>('/users/me', { bio: bioTrimmed }, token)
+    void patch<{ user: { bio: string; profilePoints?: number } }>('/users/me', { bio: bioTrimmed }, token)
       .then((r) => {
         setBioDraft(r.user.bio)
         setBioSaved(r.user.bio)
         setProfiles((prev) => prev.map((p) => (p.name === user.name ? { ...p, bio: r.user.bio } : p)))
+        setSession((prev) => {
+          if (!prev) return null
+          const next: Session = {
+            ...prev,
+            user: { ...prev.user, profilePoints: Number(r.user.profilePoints) || prev.user.profilePoints || 0 },
+          }
+          saveSession(next)
+          return next
+        })
         showToast('Био сохранено')
       })
       .catch(() => showToast('Не удалось сохранить био'))
@@ -206,6 +232,7 @@ function FeedPage() {
       await post(`/posts/${postId}/comments`, { body: t }, token)
       setCText((m) => ({ ...m, [postId]: '' }))
       fetchFeed()
+      void syncMe()
     } catch (e) {
       setCErr((m) => ({ ...m, [postId]: e instanceof Error ? e.message : 'Не удалось отправить' }))
     } finally {
@@ -237,6 +264,7 @@ function FeedPage() {
         setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1), liked: false } : p)))
       } else {
         fetchFeed()
+        void syncMe()
       }
     } catch {
       setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, likes: Math.max(0, p.likes - 1), liked: false } : p)))
@@ -253,6 +281,7 @@ function FeedPage() {
       fetchFeed()
       setCommentDraft('')
       setNewPostOpen(false)
+      void syncMe()
       showToast('Пост опубликован')
     } catch (e) {
       setPostError(e instanceof Error ? e.message : 'Ошибка публикации')
@@ -269,7 +298,7 @@ function FeedPage() {
   const feedPosts = useMemo(() => posts, [posts])
 
   const authorOptions = useMemo(() => {
-    const names = new Set(profiles.map((p) => p.name))
+    const names = new Set<string>(profiles.map((p) => p.name))
     for (const p of posts) names.add(p.author)
     return Array.from(names).sort((a, b) => a.localeCompare(b))
   }, [profiles, posts])
@@ -502,6 +531,7 @@ function FeedPage() {
           {profiles.map((p) => (
             <Button key={p.id} type="button" className={styles.profileButton} variant={activeProfile?.id === p.id ? 'primary' : 'secondary'} onClick={() => setActiveProfile(p)}>
               @{p.name}
+              <span className={styles.profilePoints}> · {p.profilePoints ?? 0} очк.</span>
             </Button>
           ))}
         </Section>
@@ -543,6 +573,7 @@ function FeedPage() {
         {activeProfile ? (
           <Section title={`Профиль @${activeProfile.name}`}>
             <p className={styles.muted}>ID: {activeProfile.id}</p>
+            <p className={styles.muted}>Очки профиля: {activeProfile.profilePoints ?? 0}</p>
             <p className={styles.muted}>Постов: {activeProfile.postsCount ?? 0}</p>
             <p>{activeProfile.bio || 'Пока без био'}</p>
             <div className={styles.inlineActions}>
@@ -567,7 +598,9 @@ function FeedPage() {
 
       {isAuth ? (
         <div className={styles.inlineActions}>
-          <Badge>@{user?.name}</Badge>
+          <Badge>
+            @{user?.name} · {user?.profilePoints ?? 0} очк.
+          </Badge>
           <Button type="button" onClick={logout} variant="ghost">
             Выйти
           </Button>
