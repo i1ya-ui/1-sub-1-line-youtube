@@ -1,0 +1,77 @@
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-lg);
+}
+
+.meta {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: var(--font-sm);
+}
+
+.error {
+  color: var(--danger);
+  margin: 0;
+  font-size: var(--font-sm);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-sm);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.table tbody tr:hover {
+  background: var(--surface-muted);
+}
+
+.rankCell {
+  width: 3rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.pointsCell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.postsCell {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.userCell {
+  min-width: 8rem;
+}
+
+.topThree .rankCell {
+  color: var(--accent);
+}

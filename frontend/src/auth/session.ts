@@ -4,7 +4,15 @@ const KEY = '1sub1line_session'
 
 function normalizeSession(s: Session): Session {
   if (!s?.user) return s
-  return { ...s, user: { ...s.user, id: Number(s.user.id) } }
+  const pp = s.user.profilePoints
+  return {
+    ...s,
+    user: {
+      ...s.user,
+      id: Number(s.user.id),
+      ...(pp != null ? { profilePoints: Number(pp) || 0 } : {}),
+    },
+  }
 }
 
 export function loadSession(): Session | null {

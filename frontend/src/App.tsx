@@ -3,6 +3,7 @@ import { useTheme } from './app/theme'
 import { Badge, Button, Card, PageContainer } from './components/ui'
 import FeedPage from './pages/FeedPage'
 import ProfilePage from './pages/ProfilePage'
+import RankingPage from './pages/RankingPage'
 import SettingsPage from './pages/SettingsPage'
 import styles from './App.module.css'
 
@@ -33,6 +34,12 @@ function App() {
             Лента
           </NavLink>
           <NavLink
+            to="/ranking"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`.trim()}
+          >
+            Рейтинг
+          </NavLink>
+          <NavLink
             to="/settings"
             className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`.trim()}
           >
@@ -44,6 +51,7 @@ function App() {
           <Routes>
             <Route path="/" element={<FeedPage />} />
             <Route path="/profile/:name" element={<ProfilePage />} />
+            <Route path="/ranking" element={<RankingPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>

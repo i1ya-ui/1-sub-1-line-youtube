@@ -5,7 +5,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { Pool } from 'pg'
 
 type UserRecord = { id: number; name: string; password_hash: string }
-type AuthResponse = { token: string; user: { id: number; name: string } }
+type AuthResponse = { token: string; user: { id: number; name: string; profilePoints: number } }
 type AuthRequest = Request & { user?: JwtPayload & { id: number; name: string } }
 
 const app = express()
@@ -18,6 +18,16 @@ const MAX_POST_BODY = 2000
 const MAX_COMMENT_BODY = 500
 const MAX_BIO = 280
 const NAME_RE = /^[a-zA-Z0-9_]{3,20}$/
+/** Очки профиля: регистрация и действия на сайте */
+const POINTS_SIGNUP = 50
+const POINTS_NEW_POST = 15
+const POINTS_COMMENT = 5
+const POINTS_LIKE_GIVEN = 2
+
+async function addProfilePoints(userId: number, delta: number) {
+  if (!delta) return
+  await pool.query('UPDATE users SET profile_points = profile_points + $1 WHERE id = $2', [delta, userId])
+}
 
 app.use(cors({ origin: corsOrigin }))
 app.use(express.json({ limit: '256kb' }))
@@ -65,6 +75,7 @@ async function initDb() {
   )
   await pool.query('CREATE INDEX IF NOT EXISTS idx_comments_post ON comments (post_id, created_at DESC)')
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT ''")
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_points INT NOT NULL DEFAULT 0')
 }
 
 const auth = (req: AuthRequest, res: Response, next: NextFunction): Response | void => {
@@ -90,32 +101,35 @@ app.post('/api/auth/signup', async (req: Request, res: Response<AuthResponse | {
   if (exists.rowCount) return res.status(409).json({ error: 'User exists' })
   const password_hash = hashPassword(password)
   const created = await pool.query<UserRecord>(
-    'INSERT INTO users (name, password_hash) VALUES ($1, $2) RETURNING id, name, password_hash',
-    [name, password_hash],
+    'INSERT INTO users (name, password_hash, profile_points) VALUES ($1, $2, $3) RETURNING id, name, password_hash',
+    [name, password_hash, POINTS_SIGNUP],
   )
   const user = created.rows[0]
-  return res.json({ token: sign(user), user: { id: user.id, name: user.name } })
+  return res.json({ token: sign(user), user: { id: user.id, name: user.name, profilePoints: POINTS_SIGNUP } })
 })
 
 app.post('/api/auth/login', async (req: Request, res: Response<AuthResponse | { error: string }>) => {
   const name = (req.body?.name as string | undefined)?.trim()
   const password = req.body?.password as string | undefined
   if (name && !NAME_RE.test(name)) return res.status(400).json({ error: 'Bad name' })
-  const found = name
-    ? await pool.query<UserRecord>('SELECT id, name, password_hash FROM users WHERE name = $1', [name])
-    : null
+  type LoginRow = UserRecord & { profile_points: number }
+  const found = name ? await pool.query<LoginRow>('SELECT id, name, password_hash, profile_points FROM users WHERE name = $1', [name]) : null
   const user = found?.rows[0]
   if (!user || !password) return res.status(401).json({ error: 'Invalid login' })
   const ok = verifyPassword(password, user.password_hash)
   if (!ok) return res.status(401).json({ error: 'Invalid login' })
-  return res.json({ token: sign(user), user: { id: user.id, name: user.name } })
+  const profilePoints = Number(user.profile_points) || 0
+  return res.json({ token: sign(user), user: { id: user.id, name: user.name, profilePoints } })
 })
 
 app.get('/api/auth/me', auth, async (req: AuthRequest, res: Response) => {
-  const r = await pool.query<{ id: number; name: string; bio: string }>('SELECT id, name, bio FROM users WHERE id = $1', [req.user!.id])
+  const r = await pool.query<{ id: number; name: string; bio: string; profile_points: number }>(
+    'SELECT id, name, bio, profile_points FROM users WHERE id = $1',
+    [req.user!.id],
+  )
   const u = r.rows[0]
   if (!u) return res.status(401).json({ error: 'User gone' })
-  res.json({ user: { id: u.id, name: u.name, bio: u.bio } })
+  res.json({ user: { id: u.id, name: u.name, bio: u.bio, profilePoints: Number(u.profile_points) || 0 } })
 })
 
 app.get('/api/health', async (_req: Request, res: Response) => {
@@ -130,11 +144,11 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 app.get('/api/users', async (req: Request, res: Response) => {
   const limitRaw = Number(req.query.limit)
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 30
-  const r = await pool.query<{ id: number; name: string; bio: string; posts_count: number }>(
-    `SELECT u.id, u.name, u.bio, COUNT(p.id)::int AS posts_count
+  const r = await pool.query<{ id: number; name: string; bio: string; posts_count: number; profile_points: number }>(
+    `SELECT u.id, u.name, u.bio, u.profile_points, COUNT(p.id)::int AS posts_count
      FROM users u
      LEFT JOIN posts p ON p.user_id = u.id
-     GROUP BY u.id, u.name, u.bio
+     GROUP BY u.id, u.name, u.bio, u.profile_points
      ORDER BY u.created_at DESC
      LIMIT $1`,
     [limit],
@@ -145,16 +159,56 @@ app.get('/api/users', async (req: Request, res: Response) => {
       name: u.name,
       bio: u.bio ?? '',
       postsCount: Number(u.posts_count) || 0,
+      profilePoints: Number(u.profile_points) || 0,
     })),
   })
+})
+
+/** Сортировка по очкам; должен быть выше `/api/users/:name`, иначе `ranking` сочтётся именем. */
+app.get('/api/users/ranking', async (req: Request, res: Response) => {
+  const limitRaw = Number(req.query.limit)
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 100) : 50
+  const r = await pool.query<{ id: number; name: string; bio: string; posts_count: number; profile_points: number }>(
+    `SELECT u.id, u.name, u.bio, u.profile_points, COUNT(p.id)::int AS posts_count
+     FROM users u
+     LEFT JOIN posts p ON p.user_id = u.id
+     GROUP BY u.id, u.name, u.bio, u.profile_points
+     ORDER BY u.profile_points DESC, u.name ASC
+     LIMIT $1`,
+    [limit],
+  )
+  const base = r.rows.map((u) => ({
+    id: Number(u.id),
+    name: u.name,
+    bio: u.bio ?? '',
+    postsCount: Number(u.posts_count) || 0,
+    profilePoints: Number(u.profile_points) || 0,
+  }))
+  let displayRank = 1
+  const ranking = base.map((row, i) => {
+    if (i > 0 && row.profilePoints < base[i - 1]!.profilePoints) displayRank = i + 1
+    return { rank: displayRank, ...row }
+  })
+  return res.json({ ranking })
 })
 
 app.get('/api/users/:name', async (req: Request, res: Response) => {
   const name = (req.params.name as string | undefined)?.trim()
   if (!name) return res.status(400).json({ error: 'Bad name' })
-  const r = await pool.query<{ id: number; name: string; bio: string }>('SELECT id, name, bio FROM users WHERE name = $1', [name])
+  const r = await pool.query<{ id: number; name: string; bio: string; profile_points: number }>(
+    'SELECT id, name, bio, profile_points FROM users WHERE name = $1',
+    [name],
+  )
   if (!r.rowCount) return res.status(404).json({ error: 'Not found' })
-  return res.json({ user: r.rows[0] })
+  const u = r.rows[0]
+  return res.json({
+    user: {
+      id: u.id,
+      name: u.name,
+      bio: u.bio,
+      profilePoints: Number(u.profile_points) || 0,
+    },
+  })
 })
 
 app.patch('/api/users/me', auth, async (req: AuthRequest, res: Response) => {
@@ -162,7 +216,9 @@ app.patch('/api/users/me', auth, async (req: AuthRequest, res: Response) => {
   if (bio.length > MAX_BIO) return res.status(400).json({ error: 'Too long' })
   const t = bio.trim()
   await pool.query('UPDATE users SET bio = $1 WHERE id = $2', [t, req.user!.id])
-  res.json({ ok: true, user: { id: req.user!.id, name: req.user!.name, bio: t } })
+  const pts = await pool.query<{ profile_points: number }>('SELECT profile_points FROM users WHERE id = $1', [req.user!.id])
+  const profilePoints = Number(pts.rows[0]?.profile_points) || 0
+  res.json({ ok: true, user: { id: req.user!.id, name: req.user!.name, bio: t, profilePoints } })
 })
 
 app.get('/api/posts', async (req: Request, res: Response) => {
@@ -269,6 +325,7 @@ app.post('/api/posts', auth, async (req: AuthRequest, res: Response) => {
     'INSERT INTO posts (user_id, body) VALUES ($1, $2) RETURNING id',
     [req.user!.id, body],
   )
+  await addProfilePoints(req.user!.id, POINTS_NEW_POST)
   res.json({ ok: true, id: Number(ins.rows[0].id) })
 })
 
@@ -279,7 +336,10 @@ app.patch('/api/posts/:id/like', auth, async (req: AuthRequest, res: Response) =
     'INSERT INTO post_likes (user_id, post_id) VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING 1',
     [req.user!.id, id],
   )
-  if (ins.rowCount) await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1', [id])
+  if (ins.rowCount) {
+    await pool.query('UPDATE posts SET likes = likes + 1 WHERE id = $1', [id])
+    await addProfilePoints(req.user!.id, POINTS_LIKE_GIVEN)
+  }
   res.json({ ok: true, liked: Boolean(ins.rowCount) })
 })
 
@@ -292,6 +352,7 @@ app.post('/api/posts/:id/comments', auth, async (req: AuthRequest, res: Response
   const ex = await pool.query('SELECT 1 FROM posts WHERE id = $1', [id])
   if (!ex.rowCount) return res.status(404).json({ error: 'Not found' })
   await pool.query('INSERT INTO comments (post_id, user_id, body) VALUES ($1, $2, $3)', [id, req.user!.id, body])
+  await addProfilePoints(req.user!.id, POINTS_COMMENT)
   res.json({ ok: true })
 })
 

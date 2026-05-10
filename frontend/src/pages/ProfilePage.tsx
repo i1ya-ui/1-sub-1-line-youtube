@@ -53,6 +53,7 @@ function ProfilePage() {
       {profile ? (
         <Card>
           <p className={styles.meta}>ID: {profile.id}</p>
+          <p className={styles.meta}>Очки профиля: {profile.profilePoints ?? 0}</p>
           <p className={styles.meta}>Постов в ленте: {authored.length}</p>
           <p className={styles.meta}>Комментариев в ленте: {commentsCount}</p>
           <p>{profile.bio || 'Пока без био'}</p>
